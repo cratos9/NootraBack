@@ -8,30 +8,30 @@ namespace AuthService.Validators
         public CreateUserValidators()
         {
             RuleFor(x => x.Username)
-                .NotEmpty().WithMessage("El nombre de usuario es obligatorio.")
-                .MinimumLength(5).WithMessage("El nombre de usuario debe tener al menos 5 caracteres.")
-                .MaximumLength(80).WithMessage("El nombre de usuario no debe exceder 80 caracteres.");
+                .NotEmpty().WithMessage("Username is required.")
+                .MinimumLength(5).WithMessage("Username must be at least 5 characters.")
+                .MaximumLength(80).WithMessage("Username must not exceed 80 characters.");
 
             RuleFor(x => x.Email)
-                .NotEmpty().WithMessage("El correo electrónico es obligatorio.")
-                .EmailAddress().WithMessage("Formato de correo electrónico inválido.")
-                .MaximumLength(100).WithMessage("El correo electrónico no debe exceder 100 caracteres.");
+                .NotEmpty().WithMessage("Email is required.")
+                .EmailAddress().WithMessage("Invalid email format.")
+                .MaximumLength(100).WithMessage("Email must not exceed 100 characters.");
 
             RuleFor(x => x.Password)
-                .NotEmpty().WithMessage("La contraseña es obligatoria.")
-                .MinimumLength(6).WithMessage("La contraseña debe tener al menos 6 caracteres.")
-                .MaximumLength(255).WithMessage("La contraseña no debe exceder 255 caracteres.")
+                .NotEmpty().WithMessage("Password is required.")
+                .MinimumLength(6).WithMessage("Password must be at least 6 characters.")
+                .MaximumLength(255).WithMessage("Password must not exceed 255 characters.")
                 .Matches(@"^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%.*?&])[A-Za-z\d@$!%.*?&]{6,}$")
-                .WithMessage("La contraseña debe contener al menos una letra mayúscula, una letra minúscula, un número y un carácter especial.");
+                .WithMessage("Password must contain at least one uppercase letter, one lowercase letter, one number and one special character.");
 
             RuleFor(x => x.ConfirmPassword)
-                .NotEmpty().WithMessage("Confirmar contraseña es obligatorio.")
-                .Equal(x => x.Password).WithMessage("Las contraseñas no coinciden.");
+                .NotEmpty().WithMessage("Confirm password is required.")
+                .Equal(x => x.Password).WithMessage("Passwords do not match.");
 
             RuleFor(x => x.FullName)
-                .NotEmpty().WithMessage("El nombre completo es obligatorio.")
-                .MinimumLength(2).WithMessage("El nombre completo debe tener al menos 2 caracteres.")
-                .MaximumLength(100).WithMessage("El nombre completo no debe exceder 100 caracteres.");
+                .NotEmpty().WithMessage("Full name is required.")
+                .MinimumLength(2).WithMessage("Full name must be at least 2 characters.")
+                .MaximumLength(100).WithMessage("Full name must not exceed 100 characters.");
         }
     }
 }
