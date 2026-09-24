@@ -16,7 +16,7 @@ namespace AuthService.Dtos
         public DateTime Expiration { get; set; }
     }
 
-    public class RefreshTokenResponseDto
+    public class RefreshTokenRequestDto
     {
         public string RefreshToken { get; set; } = default!;
     }
