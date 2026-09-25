@@ -2,7 +2,7 @@ from uuid import UUID
 from sqlalchemy.orm import Session
 from models.book import Book
 from repositories import book as book_repo
-from schemas.books import BookCreate, BookUpdate
+from schemas.book import BookCreate, BookUpdate
 
 def create_book(db:Session, book_data: BookCreate, user_id: UUID) -> Book:
     """Creates a new book in the database."""

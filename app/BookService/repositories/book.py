@@ -1,8 +1,8 @@
 from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.orm import Session
-from models import Book
-from schemas.books import BookCreate, BookUpdate
+from models.book import Book
+from schemas.book import BookCreate, BookUpdate
 
 def create(db: Session, book_data: BookCreate, user_id: UUID) -> Book:
     """ Creates a new book in the database."""
