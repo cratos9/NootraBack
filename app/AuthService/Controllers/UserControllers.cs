@@ -24,7 +24,7 @@ namespace AuthService.Controllers
             _loginValidator = loginValidator;
         }
 
-        [EnableRateLimiting("RegisterPerIp")]
+        [EnableRateLimiting("registerPerIp")]
         [HttpPost("register")]
         public async Task<ActionResult<AuthResponseDto>> Register([FromBody] CreateUserDto createUserDto)
         {
@@ -48,7 +48,7 @@ namespace AuthService.Controllers
             }
         }
 
-        [EnableRateLimiting("LoginPerIp")]
+        [EnableRateLimiting("loginPerIp")]
         [HttpPost("login")]
         public async Task<ActionResult<AuthResponseDto>> Login([FromBody] LoginUserDto loginUserDto)
         {
@@ -72,6 +72,7 @@ namespace AuthService.Controllers
             }
         }
 
+        [Authorize]
         [EnableRateLimiting("refreshPerIp")]
         [HttpPost("refresh")]
         public async Task<IActionResult> Refresh ([FromBody] RefreshTokenRequestDto refreshTokenRequestDto)
