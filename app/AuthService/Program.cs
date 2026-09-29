@@ -18,7 +18,7 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 
 builder.Services.AddSingleton<IConnectionMultiplexer>(sp =>
 {
-    var configuration = builder.Configuration.GetConnectionString("RedisConnection");
+    var configuration = builder.Configuration.GetConnectionString("Redis");
     return ConnectionMultiplexer.Connect(configuration!);
 });
 
@@ -61,7 +61,7 @@ builder.Services.AddRateLimiter(options =>
         );
     };
 
-    options.AddPolicy("LoginPerIp", httpContext => RateLimitPartition.GetFixedWindowLimiter(
+    options.AddPolicy("loginPerIp", httpContext => RateLimitPartition.GetFixedWindowLimiter(
         partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown-ip",
         factory: partition => new FixedWindowRateLimiterOptions
         {
