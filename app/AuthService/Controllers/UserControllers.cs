@@ -63,6 +63,10 @@ namespace AuthService.Controllers
                 var result = await _authService.LoginAsync(loginUserDto);
                 return Ok(result);
             }
+            catch (UnauthorizedAccessException ex)
+            {
+                return Unauthorized(new { message = ex.Message });
+            }
             catch (InvalidOperationException ex)
             {
                 return Conflict(new { message = ex.Message });
