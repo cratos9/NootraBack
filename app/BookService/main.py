@@ -8,11 +8,28 @@ from slowapi.errors import RateLimitExceeded
 from slowapi import _rate_limit_exceeded_handler
 from core.rate_limit import limiter
 from core.logging import configure_logging
+from contextlib import asynccontextmanager
+from database.redis import check_redis_connection, redis_client
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    app.state.redis = redis_client
+    
+    if check_redis_connection():
+        logging.info("Successfully connected to Redis.")
+    else:
+        logging.warning("Failed to connect to Redis. Some features may not work as expected.")
+    
+    try:
+        yield
+    finally:
+        redis_client.close()
+        logging.info("Redis connection closed.")
 
 configure_logging()
 
 logger = logging.getLogger(__name__)
-app = FastAPI()
+app = FastAPI(lifespan=lifespan, title="Book Service", description="A service for managing books.", version="1.0.0")
 
 
 app.state.limiter = limiter
