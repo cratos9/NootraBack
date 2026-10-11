@@ -1,20 +1,23 @@
 from uuid import UUID
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.orm import Session
 from database.session import get_db
 from schemas.book import BookCreate, BookUpdate, BookResponse
 from services import book as book_service
 from api.dependencies.auth import get_current_user
+from core.rate_limit import limiter
 
 router = APIRouter(prefix="/books", tags=["Books"])
 
+@limiter.limit("5/minute")
 @router.get("/prueba")
-def prueba(current_user: UUID = Depends(get_current_user)):
+def prueba(request: Request, current_user: UUID = Depends(get_current_user)):
     """Endpoint to test authentication and retrieve the current user's UUID."""
     return {"message": "Authenticated successfully", "user_id": str(current_user)}
 
+@limiter.limit("5/minute")
 @router.post("", response_model=BookResponse, status_code=status.HTTP_201_CREATED)
-def create_book(book_data: BookCreate, db: Session = Depends(get_db), current_user: UUID = Depends(get_current_user)):
+def create_book(request: Request, book_data: BookCreate, db: Session = Depends(get_db), current_user: UUID = Depends(get_current_user)):
     """Creates a new book in the database."""
     user_id = current_user
     return book_service.create_book(db=db, book_data=book_data, user_id=user_id)
