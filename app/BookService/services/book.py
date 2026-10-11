@@ -3,6 +3,9 @@ from sqlalchemy.orm import Session
 from models.book import Book
 from repositories import book as book_repo
 from schemas.book import BookCreate, BookUpdate
+import logging
+
+logger = logging.getLogger(__name__)
 
 def create_book(db:Session, book_data: BookCreate, user_id: UUID) -> Book:
     """Creates a new book in the database."""
@@ -21,6 +24,7 @@ def update_book(db: Session, book_id: UUID, book_data: BookUpdate, user_id: UUID
     book = book_repo.get_by_id(db=db, book_id=book_id, user_id=user_id)
     if book:
         return book_repo.update(db=db, book=book, book_data=book_data)
+    logger.warning("Book not found for update | Book ID: %s | User ID: %s", book_id, user_id)
     return None
 
 def delete_book(db: Session, book_id: UUID, user_id: UUID) -> bool:
@@ -29,4 +33,5 @@ def delete_book(db: Session, book_id: UUID, user_id: UUID) -> bool:
     if book:
         book_repo.delete(db=db, book=book)
         return True
+    logger.warning("Book not found for deletion | Book ID: %s | User ID: %s", book_id, user_id)
     return False
