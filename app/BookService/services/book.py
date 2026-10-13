@@ -22,7 +22,16 @@ def invalidate_book_cache(book_id: UUID, user_id: UUID):
 
 def create_book(db:Session, book_data: BookCreate, user_id: UUID) -> Book:
     """Creates a new book in the database."""
-    return book_repo.create(db=db, book_data=book_data, user_id=user_id)
+    try:
+        book = book_repo.create(db=db, book_data=book_data, user_id=user_id)
+        db.commit()
+        db.refresh(book)
+        logger.info("Book created successfully | Book ID: %s | User ID: %s", book.id, user_id)
+        return book
+    except Exception:
+        db.rollback()
+        logger.error("Error creating book | User ID: %s", user_id, exc_info=True)
+        raise
 
 def get_book_by_id(db:Session, book_id: UUID, user_id: UUID) -> Book | None:
     """Retrieves a book by its ID and user ID."""
@@ -47,19 +56,34 @@ def get_all_books(db:Session, user_id: UUID) -> list[Book]:
 
 def update_book(db: Session, book_id: UUID, book_data: BookUpdate, user_id: UUID) -> Book | None:
     """Updates an existing book in the database."""
-    book = book_repo.get_by_id(db=db, book_id=book_id, user_id=user_id)
-    if book:
-        invalidate_book_cache(book_id=book_id, user_id=user_id)
-        return book_repo.update(db=db, book=book, book_data=book_data)
-    logger.warning("Book not found for update | Book ID: %s | User ID: %s", book_id, user_id)
-    return None
-
+    try:
+        book = book_repo.get_by_id(db=db, book_id=book_id, user_id=user_id)
+        if book:
+            invalidate_book_cache(book_id=book_id, user_id=user_id)
+            updated_book = book_repo.update(db=db, book=book, book_data=book_data)
+            db.commit()
+            db.refresh(updated_book)
+            logger.info("Book updated successfully | Book ID: %s | User ID: %s", book_id, user_id)
+            return updated_book
+        logger.warning("Book not found for update | Book ID: %s | User ID: %s", book_id, user_id)
+        return None
+    except Exception:
+        db.rollback()
+        logger.error("Error updating book | Book ID: %s | User ID: %s", book_id, user_id, exc_info=True)
+        raise
+    
 def delete_book(db: Session, book_id: UUID, user_id: UUID) -> bool:
     """Deletes a book from the database."""
-    book = book_repo.get_by_id(db=db, book_id=book_id, user_id=user_id)
-    if book:
-        invalidate_book_cache(book_id=book_id, user_id=user_id)
-        book_repo.delete(db=db, book=book)
-        return True
-    logger.warning("Book not found for deletion | Book ID: %s | User ID: %s", book_id, user_id)
-    return False
+    try:
+        book = book_repo.get_by_id(db=db, book_id=book_id, user_id=user_id)
+        if book:
+            invalidate_book_cache(book_id=book_id, user_id=user_id)
+            book_repo.delete(db=db, book=book)
+            db.commit()
+            return True
+        logger.warning("Book not found for deletion | Book ID: %s | User ID: %s", book_id, user_id)
+        return False
+    except Exception:
+        db.rollback()
+        logger.error("Error deleting book | Book ID: %s | User ID: %s", book_id, user_id, exc_info=True)
+        raise

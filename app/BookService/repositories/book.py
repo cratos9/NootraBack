@@ -10,8 +10,7 @@ def create(db: Session, book_data: BookCreate, user_id: UUID) -> Book:
     book = Book(user_id=user_id, **book_data.model_dump())
 
     db.add(book)
-    db.commit()
-    db.refresh(book)
+    db.flush()
 
     return book
 
@@ -34,8 +33,7 @@ def update(db: Session, book: Book, book_data: BookUpdate) -> Book:
     for key, value in update_data.items():
         setattr(book, key, value)
 
-    db.commit()
-    db.refresh(book)
+    db.flush()
 
     return book
 
@@ -43,4 +41,4 @@ def delete(db: Session, book: Book) -> None:
     """ Deletes a book from the database."""
     
     db.delete(book)
-    db.commit()
+    db.flush()
