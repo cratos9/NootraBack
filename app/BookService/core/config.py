@@ -6,6 +6,7 @@ class Settings(BaseSettings):
     port: int
     database_url: str
     redis_url: str
+    redis_cache_expire: int
     secret_key: str
     jwt_algorithm: str
     jwt_issuer: str

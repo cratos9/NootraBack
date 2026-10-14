@@ -2,11 +2,12 @@ from uuid import UUID
 from sqlalchemy.orm import Session
 from models.book import Book
 from repositories import book as book_repo
+from math import ceil
 from redis.exceptions import RedisError
 import json
 from database.redis import redis_client
 from core.config import settings
-from schemas.book import BookCreate, BookUpdate, BookResponse
+from schemas.book import BookCreate, BookUpdate, BookResponse, BooksPublicResponse
 import logging
 
 logger = logging.getLogger(__name__)
@@ -45,7 +46,7 @@ def get_book_by_id(db:Session, book_id: UUID, user_id: UUID) -> Book | None:
         logger.error("Redis error while fetching book ID: %s | User ID: %s | Error: %s", book_id, user_id, e)
     response = book_repo.get_by_id(db=db, book_id=book_id, user_id=user_id)
     try:
-        redis_client.setex(cache_key, settings.REDIS_CACHE_EXPIRE, response.model_dump_json())
+        redis_client.setex(cache_key, settings.redis_cache_expire, response.model_dump_json())
     except RedisError as e:
         logger.error("Redis error while caching book ID: %s | User ID: %s | Error: %s", book_id, user_id, e)
     return response
@@ -87,3 +88,61 @@ def delete_book(db: Session, book_id: UUID, user_id: UUID) -> bool:
         db.rollback()
         logger.error("Error deleting book | Book ID: %s | User ID: %s", book_id, user_id, exc_info=True)
         raise
+    
+def toggle_favorite(db: Session, book_id: UUID, user_id: UUID) -> Book | None:
+    """Toggles the favorite status of a book."""
+    try:
+        book = book_repo.favorite(db=db, book_id=book_id, user_id=user_id)
+        if book:
+            invalidate_book_cache(book_id=book_id, user_id=user_id)
+            db.commit()
+            db.refresh(book)
+            logger.info("Book favorite status toggled | Book ID: %s | User ID: %s", book_id, user_id)
+            return book
+        logger.warning("Book not found for toggling favorite | Book ID: %s | User ID: %s", book_id, user_id)
+        return None
+    except Exception:
+        db.rollback()
+        logger.error("Error toggling favorite status | Book ID: %s | User ID: %s", book_id, user_id, exc_info=True)
+        raise
+    
+def toggle_archive(db: Session, book_id: UUID, user_id: UUID) -> Book | None:
+    """Toggles the archived status of a book."""
+    try:
+        book = book_repo.archive(db=db, book_id=book_id, user_id=user_id)
+        if book:
+            invalidate_book_cache(book_id=book_id, user_id=user_id)
+            db.commit()
+            db.refresh(book)
+            logger.info("Book archived status toggled | Book ID: %s | User ID: %s", book_id, user_id)
+            return book
+        logger.warning("Book not found for toggling archive | Book ID: %s | User ID: %s", book_id, user_id)
+        return None
+    except Exception:
+        db.rollback()
+        logger.error("Error toggling archive status | Book ID: %s | User ID: %s", book_id, user_id, exc_info=True)
+        raise
+    
+def toggle_public(db: Session, book_id: UUID, user_id: UUID) -> Book | None:
+    """Toggles the public status of a book."""
+    try:
+        book = book_repo.public(db=db, book_id=book_id, user_id=user_id)
+        if book:
+            invalidate_book_cache(book_id=book_id, user_id=user_id)
+            db.commit()
+            db.refresh(book)
+            logger.info("Book public status toggled | Book ID: %s | User ID: %s", book_id, user_id)
+            return book
+        logger.warning("Book not found for toggling public | Book ID: %s | User ID: %s", book_id, user_id)
+        return None
+    except Exception:
+        db.rollback()
+        logger.error("Error toggling public status | Book ID: %s | User ID: %s", book_id, user_id, exc_info=True)
+        raise
+
+def get_public_books(db: Session, page: int) -> BooksPublicResponse:
+    """Retrieves all public books."""
+    size = 25
+    books, total_items = book_repo.get_public_books(db=db, page=page, page_size=size)
+    total_pages = ceil(total_items / size) if total_items else 0
+    return BooksPublicResponse( books=books, page=page, page_size=size, total_items=total_items, total_pages=total_pages)
