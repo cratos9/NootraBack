@@ -77,6 +77,7 @@ def delete_book(db: Session, book_id: UUID, user_id: UUID) -> bool:
             invalidate_book_cache(book_id=book_id, user_id=user_id)
             book_repo.delete(db=db, book=book)
             db.commit()
+            logger.info("Book deleted successfully | Book ID: %s | User ID: %s", book_id, user_id)
             return True
         logger.warning("Book not found for deletion | Book ID: %s | User ID: %s", book_id, user_id)
         return False
@@ -136,24 +137,43 @@ def toggle_public(db: Session, book_id: UUID, user_id: UUID) -> Book | None:
         logger.error("Error toggling public status | Book ID: %s | User ID: %s", book_id, user_id, exc_info=True)
         raise
 
-def get_public_books(db: Session, page: int) -> BooksResponse:
+def get_public_books(db: Session, page: int, page_size: int) -> BooksResponse:
     """Retrieves all public books."""
-    size = 25
-    books, total_items = book_repo.get_public_books(db=db, page=page, page_size=size)
-    total_pages = ceil(total_items / size) if total_items else 0
-    return BooksResponse( books=books, page=page, page_size=size, total_items=total_items, total_pages=total_pages)
+    try:
+        books, total_items = book_repo.get_public_books(db=db, page=page, page_size=page_size)
+        total_pages = ceil(total_items / page_size) if total_items else 0
+        logger.info("Retrieved public books | Page: %d | Page Size: %d | Total Items: %d | Total Pages: %d", page, page_size, total_items, total_pages)
+        return BooksResponse( books=books, page=page, page_size=page_size, total_items=total_items, total_pages=total_pages)
+    except Exception:
+        logger.error("Error retrieving public books | Page: %d | Page Size: %d", page, page_size, exc_info=True)
+        raise
 
 def _build_books_response(books: list[Book], page: int, page_size: int, total_items: int) -> BooksResponse:
     """Builds a BooksResponse object from the given parameters."""
-    total_pages = ceil(total_items / page_size) if total_items else 0
-    return BooksResponse(books=books, page=page, page_size=page_size, total_items=total_items, total_pages=total_pages)
+    try:
+        total_pages = ceil(total_items / page_size) if total_items else 0
+        logger.info("Built books response | Page: %d | Page Size: %d | Total Items: %d | Total Pages: %d", page, page_size, total_items, total_pages)
+        return BooksResponse(books=books, page=page, page_size=page_size, total_items=total_items, total_pages=total_pages)
+    except Exception:
+        logger.error("Error building books response | Page: %d | Page Size: %d", page, page_size, exc_info=True)
+        raise
 
 def get_active_books(db: Session, user_id: UUID, page: int, page_size: int) -> BooksResponse:
     """Retrieves all active (non-archived) books for a user."""
-    books, total_items = book_repo.get_active_books(db=db, user_id=user_id, page=page, page_size=page_size)
-    return _build_books_response(books=books, page=page, page_size=page_size, total_items=total_items)
+    try:
+        books, total_items = book_repo.get_active_books(db=db, user_id=user_id, page=page, page_size=page_size)
+        logger.info("Retrieved active books for user | User ID: %s | Page: %d | Page Size: %d | Total Items: %d", user_id, page, page_size, total_items)
+        return _build_books_response(books=books, page=page, page_size=page_size, total_items=total_items)
+    except Exception:
+        logger.error("Error retrieving active books for user | User ID: %s | Page: %d | Page Size: %d", user_id, page, page_size, exc_info=True)
+        raise
 
 def get_archived_books(db: Session, user_id: UUID, page: int, page_size: int) -> BooksResponse:
     """Retrieves all archived books for a user."""
-    books, total_items = book_repo.get_archived_books(db=db, user_id=user_id, page=page, page_size=page_size)
-    return _build_books_response(books=books, page=page, page_size=page_size, total_items=total_items)  
+    try:
+        books, total_items = book_repo.get_archived_books(db=db, user_id=user_id, page=page, page_size=page_size)
+        logger.info("Retrieved archived books for user | User ID: %s | Page: %d | Page Size: %d | Total Items: %d", user_id, page, page_size, total_items)
+        return _build_books_response(books=books, page=page, page_size=page_size, total_items=total_items)
+    except Exception:
+        logger.error("Error retrieving archived books for user | User ID: %s | Page: %d | Page Size: %d", user_id, page, page_size, exc_info=True)
+        raise
