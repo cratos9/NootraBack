@@ -105,8 +105,8 @@ def public_book(request: Request, book_id: BookPublish, db: Session = Depends(ge
 
 @router.get("/public_books", response_model=BooksResponse, summary="Get public books", description="Retrieves public books from the database with pagination.")
 @limiter.limit("20/minute")
-def get_public_books(request: Request, page: int = Query(1, ge=1), db: Session = Depends(get_db), current_user: UUID = Depends(get_current_user)):
+def get_public_books(request: Request, page: int = Query(1, ge=1), page_size: int = Query(25, ge=1, le=100), db: Session = Depends(get_db), current_user: UUID = Depends(get_current_user)):
     """Retrieves public books with pagination."""
-    books = book_service.get_public_books(db=db, page=page)
+    books = book_service.get_public_books(db=db, page=page, page_size=page_size)
     logger.info("Public books retrieved | Page: %d | Count: %d", page, len(books))
     return books

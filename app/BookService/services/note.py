@@ -62,6 +62,8 @@ def update_note(db: Session, book_id: UUID, note_id: UUID, note_data: NoteUpdate
             db.refresh(updated_note)
             logger.info("Note updated successfully | Note ID: %s | User ID: %s", note_id, user_id)
             return updated_note
+        logger.warning("Note not found for update | Note ID: %s | User ID: %s", note_id, user_id)
+        return None
     except Exception:
         db.rollback()
         logger.error("Error updating note | Note ID: %s | User ID: %s", note_id, user_id, exc_info=True)
