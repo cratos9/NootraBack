@@ -64,11 +64,12 @@ def public(db: Session, book_id : UUID, note_id: UUID, user_id: UUID) -> Note:
         db.flush()
     return note
 
-def get_public_notes(db: Session, user_id: UUID, book_id: UUID, page: int = 1, page_size: int = 10) -> tuple[list[Note], int]:
-    """ Retrieves all public notes for a specific book and user."""
+def get_public_notes(db: Session, book_id: UUID, page: int = 1, page_size: int = 10) -> tuple[list[Note], int]:
+    """Retrieves all public notes for a specific book."""
     
-    total_items = db.scalar(select(func.count()).select_from(Note).where(Note.book_id == book_id, Note.user_id == user_id, Note.is_public.is_(True))) or 0
-    statement = select(Note).where(Note.book_id == book_id, Note.user_id == user_id, Note.is_public.is_(True)).offset((page - 1) * page_size).limit(page_size)
+    filters = (Note.book_id == book_id, Note.is_public.is_(True))
+    total_items = db.scalar(select(func.count()).select_from(Note).where(*filters)) or 0
+    statement = select(Note).where(*filters).offset((page - 1) * page_size).limit(page_size)
     notes = list(db.scalars(statement).all())
     return notes, total_items
 
@@ -82,7 +83,7 @@ def _get_note_by_archived_status(db: Session, user_id: UUID, book_id: UUID, is_a
     )
     
     total_items = db.scalar(select(func.count()).select_from(Note).where(*filters)) or 0
-    statement = (select(Note).where(*filters).order_by(Note.is_favorite.desc(), Note.update_at.desc(), Note.id).offset((page - 1) * page_size).limit(page_size))
+    statement = (select(Note).where(*filters).order_by(Note.is_favorite.desc(), Note.updated_at.desc(), Note.id).offset((page - 1) * page_size).limit(page_size))
     
     notes = list(db.scalars(statement).all())
     

@@ -45,10 +45,11 @@ def get_note_by_id(db: Session, book_id: UUID, note_id: UUID, user_id: UUID) -> 
     except RedisError as e:
         logger.error("Redis error while fetching note ID: %s | User ID: %s | Error: %s", note_id, user_id, e)
     response = note_repo.get_by_id(db=db, book_id=book_id, note_id=note_id, user_id=user_id)
-    try:
-        redis_client.setex(cache_key, settings.redis_cache_expire, response.model_dump_json())
-    except RedisError as e:
-        logger.error("Redis error while caching note ID: %s | User ID: %s | Error: %s", note_id, user_id, e)
+    if response:
+        try:
+            redis_client.setex(cache_key, settings.redis_cache_expire, NoteResponse.model_validate(response).model_dump_json())
+        except RedisError as e:
+            logger.error("Redis error while caching note ID: %s | User ID: %s | Error: %s", note_id, user_id, e)
     return response
 
 def update_note(db: Session, book_id: UUID, note_id: UUID, note_data: NoteUpdate, user_id: UUID) -> Note | None:
