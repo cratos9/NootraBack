@@ -4,6 +4,7 @@ from uuid import uuid4
 
 from fastapi import FastAPI, Request
 from api.routes.books import router as books_router
+from api.routes.note import router as notes_router
 from slowapi.errors import RateLimitExceeded
 from slowapi import _rate_limit_exceeded_handler
 from core.rate_limit import limiter
@@ -29,13 +30,14 @@ async def lifespan(app: FastAPI):
 configure_logging()
 
 logger = logging.getLogger(__name__)
-app = FastAPI(lifespan=lifespan, title="Book Service", description="A service for managing books, notes and archives.", version="1.0.0")
+app = FastAPI(lifespan=lifespan, title="Book Service", description="A service for managing books, notes and archives.", version="1.1.0")
 
 
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 app.include_router(books_router)
+app.include_router(notes_router)
 
 @app.middleware("http")
 async def log_request(request: Request, call_next):
@@ -54,7 +56,3 @@ async def log_request(request: Request, call_next):
     finally:
         duration_ms = (perf_counter() - start_time) * 1000
         logger.info("Request completed | Request ID: %s | Path: %s | Method: %s | Status Code: %d | Duration: %.2f ms", request_id, request.url.path, request.method, status_code, duration_ms,)
-
-@app.get("/")
-async def root():
-    return {"message": "Hello World"}

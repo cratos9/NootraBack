@@ -12,13 +12,6 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/books", tags=["Books"])
 
-@router.get("/prueba", summary="Test endpoint for authentication", description="This endpoint is used to test authentication and retrieve the current user's UUID.")
-@limiter.limit("5/minute")
-def prueba(request: Request, current_user: UUID = Depends(get_current_user)):
-    """Endpoint to test authentication and retrieve the current user's UUID."""
-    logger.info("Authenticated request | User ID: %s", current_user)
-    return {"message": "Authenticated successfully", "user_id": str(current_user)}
-
 @router.post("", response_model=BookResponse, status_code=status.HTTP_201_CREATED, summary="Create a new book", description="Creates a new book in the database and returns the created book's details.")
 @limiter.limit("20/minute")
 def create_book(request: Request, book_data: BookCreate, db: Session = Depends(get_db), current_user: UUID = Depends(get_current_user)):
