@@ -1,14 +1,18 @@
 from sqlalchemy import Integer, Text, DateTime, ForeignKey, func, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from database.base import Base
+from typing import TYPE_CHECKING
 from datetime import datetime
 import uuid
+
+if TYPE_CHECKING:
+    from .note import Note
 
 class Book(Base):
     __tablename__ = "books"
 
     # IDs of the book, parent book (if any), and the user who created it
-    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     parent_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("books.id", ondelete="CASCADE"), nullable=True, index=True)
     user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False, index=True)
     
@@ -47,4 +51,4 @@ class Book(Base):
     children: Mapped[list["Book"]] = relationship("Book", back_populates="parent", cascade="all, delete-orphan")
     parent: Mapped["Book | None"] = relationship("Book", back_populates="children", remote_side=[id])
     # attachments: Mapped[list["Attachment"]] = mapped_column(nullable=True, foreign_key="attachments.book_id", ondelete="CASCADE", index=True, lazy="dynamic")
-    # notes: Mapped[list["Note"]] = mapped_column(nullable=True, foreign_key="notes.book_id", ondelete="CASCADE", index=True, lazy="dynamic")
+    notes: Mapped[list["Note"]] = relationship("Note", back_populates="book", cascade="all, delete-orphan")
