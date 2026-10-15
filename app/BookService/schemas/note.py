@@ -64,25 +64,29 @@ class NoteDeleteResponse(BaseModel):
     
     # ID of the deleted note
     id: UUID
+    book_id: UUID
 
 class NotePublish(BaseModel):
     """Represents the data needed to publish a note."""
     
     # ID of the note to be published
     id: UUID
+    book_id: UUID
 
 class NoteFavorite(BaseModel):
     """Represents the data needed to mark a note as favorite."""
     
     # ID of the note to be marked as favorite
     id: UUID
+    book_id: UUID
 
 class NoteArchive(BaseModel):
     """Represents the data needed to archive a note."""
     
     # ID of the note to be archived
     id: UUID
-    
+    book_id: UUID
+
 class NotesResponse(BaseModel):
     """Represents the data returned when retrieving multiple notes."""
     

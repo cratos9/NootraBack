@@ -14,10 +14,10 @@ def create(db: Session, note_data: NoteCreate, user_id: UUID) -> Note:
 
     return note
     
-def get_by_id(db: Session, note_id: UUID, user_id: UUID) -> Note | None:
+def get_by_id(db: Session, book_id: UUID, note_id: UUID, user_id: UUID) -> Note | None:
     """ Retrieves a note by its ID and user ID."""
     
-    statement = select(Note).where(Note.id == note_id, Note.user_id == user_id)
+    statement = select(Note).where(Note.id == note_id, Note.book_id == book_id, Note.user_id == user_id)
     return db.scalar(statement)
 
 def update(db: Session, note: Note, note_data: NoteUpdate) -> Note:
@@ -37,28 +37,28 @@ def delete(db: Session, note: Note) -> None:
     db.delete(note)
     db.flush()
     
-def favorite(db: Session, note_id: UUID, user_id: UUID) -> Note:
+def favorite(db: Session, book_id : UUID, note_id: UUID, user_id: UUID) -> Note:
     """ Marks a note as favorite."""
     
-    note = get_by_id(db=db, note_id=note_id, user_id=user_id)
+    note = get_by_id(db=db, book_id=book_id, note_id=note_id, user_id=user_id)
     if note:
         note.is_favorite = not note.is_favorite
         db.flush()
     return note
 
-def archive(db: Session, note_id: UUID, user_id: UUID) -> Note:
+def archive(db: Session, book_id : UUID, note_id: UUID, user_id: UUID) -> Note:
     """ Archives a note."""
     
-    note = get_by_id(db=db, note_id=note_id, user_id=user_id)
+    note = get_by_id(db=db, book_id=book_id, note_id=note_id, user_id=user_id)
     if note:
         note.is_archived = not note.is_archived
         db.flush()
     return note
 
-def public(db: Session, note_id: UUID, user_id: UUID) -> Note:
+def public(db: Session, book_id : UUID, note_id: UUID, user_id: UUID) -> Note:
     """ Makes a note public."""
     
-    note = get_by_id(db=db, note_id=note_id, user_id=user_id)
+    note = get_by_id(db=db, book_id=book_id, note_id=note_id, user_id=user_id)
     if note:
         note.is_public = not note.is_public
         db.flush()
