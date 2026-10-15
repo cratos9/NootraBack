@@ -29,7 +29,7 @@ async def lifespan(app: FastAPI):
 configure_logging()
 
 logger = logging.getLogger(__name__)
-app = FastAPI(lifespan=lifespan, title="Book Service", description="A service for managing books.", version="1.0.0")
+app = FastAPI(lifespan=lifespan, title="Book Service", description="A service for managing books, notes and archives.", version="1.0.0")
 
 
 app.state.limiter = limiter
