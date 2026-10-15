@@ -1,6 +1,6 @@
 from uuid import UUID
 from datetime import datetime
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 class BookCreate(BaseModel):
     """Represents the data needed to create a new book."""
@@ -92,3 +92,33 @@ class BookDeleteResponse(BaseModel):
     
     # ID of the deleted book
     id: UUID
+    
+class BookPublish(BaseModel):
+    """Represents the data needed to publish a book."""
+    
+    # ID of the book to be published
+    id: UUID
+    
+class BookFavorite(BaseModel):
+    """Represents the data needed to mark a book as favorite."""
+    
+    # ID of the book to be marked as favorite
+    id: UUID
+    
+class BookArchive(BaseModel):
+    """Represents the data needed to archive a book."""
+    
+    # ID of the book to be archived
+    id: UUID
+    
+class BooksResponse(BaseModel):
+    """Represents the data returned when retrieving books."""
+    
+    # List of books
+    books: list[BookResponse]
+    
+    # Information about pagination of books
+    page: int
+    page_size: int
+    total_items: int
+    total_pages: int
