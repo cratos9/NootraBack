@@ -2,7 +2,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status, Request, Query
 from sqlalchemy.orm import Session
 from database.session import get_db
-from schemas.book import BookCreate, BookUpdate, BookResponse, BookPublish, BookArchive, BookFavorite, BooksPublicResponse
+from schemas.book import BookCreate, BookUpdate, BookResponse, BookPublish, BookArchive, BookFavorite, BooksResponse
 from services import book as book_service
 from api.dependencies.auth import get_current_user
 from core.rate_limit import limiter
@@ -27,12 +27,20 @@ def create_book(request: Request, book_data: BookCreate, db: Session = Depends(g
     logger.info("Book created | Book ID: %s | User ID: %s", created_book.id, current_user)
     return created_book
 
-@router.get("", response_model=list[BookResponse])
+@router.get("", response_model=BooksResponse)
 @limiter.limit("50/minute")
-def get_books(request: Request, db: Session = Depends(get_db), current_user: UUID = Depends(get_current_user)):
+def get_books(request: Request,page: int = Query(1, ge=1), page_size: int = Query(25, ge=1, le=100), db: Session = Depends(get_db), current_user: UUID = Depends(get_current_user)):
     """Retrieves all books from the database."""
-    books = book_service.get_all_books(db=db, user_id=current_user)
+    books = book_service.get_active_books(db=db, user_id=current_user, page=page, page_size=page_size)
     logger.info("Books retrieved | User ID: %s | Count: %d", current_user, len(books))
+    return books
+
+@router.get("/archived", response_model=BooksResponse)
+@limiter.limit("20/minute")
+def get_archived_books(request: Request, page: int = Query(1, ge=1), page_size: int = Query(25, ge=1, le=100), db: Session = Depends(get_db), current_user: UUID = Depends(get_current_user)):
+    """Retrieves archived books with pagination."""
+    books = book_service.get_archived_books(db=db, user_id=current_user, page=page, page_size=page_size)
+    logger.info("Archived books retrieved | User ID: %s | Page: %d | Count: %d", current_user, page, len(books))
     return books
 
 @router.get("/{book_id}", response_model=BookResponse)
@@ -95,7 +103,7 @@ def public_book(request: Request, book_id: BookPublish, db: Session = Depends(ge
     logger.info("Book made public | Book ID: %s | User ID: %s", book_id, current_user)
     return book
 
-@router.get("/public_books", response_model=BooksPublicResponse)
+@router.get("/public_books", response_model=BooksResponse)
 @limiter.limit("20/minute")
 def get_public_books(request: Request, page: int = Query(1, ge=1), db: Session = Depends(get_db), current_user: UUID = Depends(get_current_user)):
     """Retrieves public books with pagination."""

@@ -21,12 +21,6 @@ def get_by_id(db: Session, book_id: UUID, user_id: UUID) -> Book | None:
     statement = select(Book).where(Book.id == book_id, Book.user_id == user_id)
     return db.scalar(statement)
 
-def get_all(db: Session, user_id: UUID) -> list[Book]:
-    """ Retrieves all books for a specific user."""
-    
-    statement = select(Book).where(Book.user_id == user_id)
-    return list(db.scalars(statement).all())
-
 def update(db: Session, book: Book, book_data: BookUpdate) -> Book:
     """ Updates an existing book in the database."""
     
@@ -77,3 +71,25 @@ def get_public_books(db: Session, page: int, page_size: int) -> tuple[list[Book]
     statement = (select(Book).where(Book.is_public.is_(True)).offset((page - 1) * page_size).limit(page_size))
     books = list(db.scalars(statement).all())
     return books, total_items
+
+def _get_book_by_archived_status(db: Session, user_id: UUID, page:int, page_size:int, is_archived: bool) -> tuple[list[Book], int]:
+    """ Retrieves books based on their archived status."""
+    filters = (
+        Book.user_id == user_id,
+        Book.is_archived.is_(is_archived)
+    )
+    
+    total_items = db.scalar(select(func.count()).select_from(Book).where(*filters)) or 0
+    statement = (select(Book).where(*filters).order_by(Book.is_favorite.desc(), Book.updated_at.desc(), Book.id).offset((page - 1) * page_size).limit(page_size))
+    
+    books = list(db.scalars(statement).all())
+    
+    return books, total_items
+
+def get_active_books(db: Session, user_id: UUID, page: int, page_size: int) -> tuple[list[Book], int]:
+    """ Retrieves all active (non-archived) books for a user."""
+    return _get_book_by_archived_status(db=db, user_id=user_id, page=page, page_size=page_size, is_archived=False)
+
+def get_archived_books(db: Session, user_id: UUID, page: int, page_size: int) -> tuple[list[Book], int]:
+    """ Retrieves all archived books for a user."""
+    return _get_book_by_archived_status(db=db, user_id=user_id, page=page, page_size=page_size, is_archived=True)

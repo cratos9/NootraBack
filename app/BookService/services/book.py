@@ -7,7 +7,7 @@ from redis.exceptions import RedisError
 import json
 from database.redis import redis_client
 from core.config import settings
-from schemas.book import BookCreate, BookUpdate, BookResponse, BooksPublicResponse
+from schemas.book import BookCreate, BookUpdate, BookResponse, BooksResponse
 import logging
 
 logger = logging.getLogger(__name__)
@@ -50,10 +50,6 @@ def get_book_by_id(db:Session, book_id: UUID, user_id: UUID) -> Book | None:
     except RedisError as e:
         logger.error("Redis error while caching book ID: %s | User ID: %s | Error: %s", book_id, user_id, e)
     return response
-
-def get_all_books(db:Session, user_id: UUID) -> list[Book]:
-    """Retrieves all books for a specific user."""
-    return book_repo.get_all(db=db, user_id=user_id)
 
 def update_book(db: Session, book_id: UUID, book_data: BookUpdate, user_id: UUID) -> Book | None:
     """Updates an existing book in the database."""
@@ -140,9 +136,24 @@ def toggle_public(db: Session, book_id: UUID, user_id: UUID) -> Book | None:
         logger.error("Error toggling public status | Book ID: %s | User ID: %s", book_id, user_id, exc_info=True)
         raise
 
-def get_public_books(db: Session, page: int) -> BooksPublicResponse:
+def get_public_books(db: Session, page: int) -> BooksResponse:
     """Retrieves all public books."""
     size = 25
     books, total_items = book_repo.get_public_books(db=db, page=page, page_size=size)
     total_pages = ceil(total_items / size) if total_items else 0
-    return BooksPublicResponse( books=books, page=page, page_size=size, total_items=total_items, total_pages=total_pages)
+    return BooksResponse( books=books, page=page, page_size=size, total_items=total_items, total_pages=total_pages)
+
+def _build_books_response(books: list[Book], page: int, page_size: int, total_items: int) -> BooksResponse:
+    """Builds a BooksResponse object from the given parameters."""
+    total_pages = ceil(total_items / page_size) if total_items else 0
+    return BooksResponse(books=books, page=page, page_size=page_size, total_items=total_items, total_pages=total_pages)
+
+def get_active_books(db: Session, user_id: UUID, page: int, page_size: int) -> BooksResponse:
+    """Retrieves all active (non-archived) books for a user."""
+    books, total_items = book_repo.get_active_books(db=db, user_id=user_id, page=page, page_size=page_size)
+    return _build_books_response(books=books, page=page, page_size=page_size, total_items=total_items)
+
+def get_archived_books(db: Session, user_id: UUID, page: int, page_size: int) -> BooksResponse:
+    """Retrieves all archived books for a user."""
+    books, total_items = book_repo.get_archived_books(db=db, user_id=user_id, page=page, page_size=page_size)
+    return _build_books_response(books=books, page=page, page_size=page_size, total_items=total_items)  

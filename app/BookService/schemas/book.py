@@ -111,13 +111,13 @@ class BookArchive(BaseModel):
     # ID of the book to be archived
     id: UUID
     
-class BooksPublicResponse(BaseModel):
-    """Represents the data returned when retrieving public books."""
+class BooksResponse(BaseModel):
+    """Represents the data returned when retrieving books."""
     
-    # List of public books
+    # List of books
     books: list[BookResponse]
     
-    # Information about pagination of public books
+    # Information about pagination of books
     page: int
     page_size: int
     total_items: int
