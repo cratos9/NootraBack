@@ -20,12 +20,20 @@ def create_note(request: Request, note_data: NoteCreate, db: Session = Depends(g
     logger.info("Note created | Note ID: %s | User ID: %s", created_note.id, current_user)
     return created_note
 
+@router.get("/public_notes", response_model=NotesResponse, summary="Get public notes", description="Retrieves public notes from the database with pagination.")
+@limiter.limit("20/minute")
+def get_public_notes(request: Request, book_id: UUID, page: int = Query(1, ge=1), page_size: int = Query(25, ge=1, le=100), db: Session = Depends(get_db), current_user: UUID = Depends(get_current_user)):
+    """Retrieves public notes from the database."""
+    notes = note_service.get_public_notes(db=db, book_id=book_id, page=page, page_size=page_size)
+    logger.info("Public notes retrieved | Book ID: %s | Page: %d | Count: %d", book_id, page, len(notes.notes))
+    return notes
+
 @router.get("/{book_id}", response_model=NotesResponse, summary="Get all notes", description="Retrieves all active notes from the database with pagination.")
 @limiter.limit("50/minute")
 def get_notes(request: Request, book_id: UUID, page: int = Query(1, ge=1), page_size: int = Query(25, ge=1, le=100), db: Session = Depends(get_db), current_user: UUID = Depends(get_current_user)):
     """Retrieves all notes from the database."""
     notes = note_service.get_active_notes(db=db, book_id=book_id, user_id=current_user, page=page, page_size=page_size)
-    logger.info("Notes retrieved | Book ID: %s | User ID: %s | Count: %d", book_id, current_user, len(notes))
+    logger.info("Notes retrieved | Book ID: %s | User ID: %s | Count: %d", book_id, current_user, len(notes.notes))
     return notes
 
 @router.get("/{book_id}/archived", response_model=NotesResponse, summary="Get archived notes", description="Retrieves archived notes from the database with pagination.")
@@ -33,7 +41,7 @@ def get_notes(request: Request, book_id: UUID, page: int = Query(1, ge=1), page_
 def get_archived_notes(request: Request, book_id: UUID, page: int = Query(1, ge=1), page_size: int = Query(25, ge=1, le=100), db: Session = Depends(get_db), current_user: UUID = Depends(get_current_user)):
     """Retrieves archived notes with pagination."""
     notes = note_service.get_archived_notes(db=db, book_id=book_id, user_id=current_user, page=page, page_size=page_size)
-    logger.info("Archived notes retrieved | Book ID: %s | User ID: %s | Page: %d | Count: %d", book_id, current_user, page, len(notes))
+    logger.info("Archived notes retrieved | Book ID: %s | User ID: %s | Page: %d | Count: %d", book_id, current_user, page, len(notes.notes))
     return notes
 
 @router.get("/{book_id}/{note_id}", response_model=NoteResponse, summary="Get a note by ID", description="Retrieves a specific note by its ID.")
@@ -68,38 +76,30 @@ def delete_note(request: Request, book_id: UUID, note_id: UUID, db: Session = De
 
 @router.post("/favorite", response_model=NoteResponse, summary="Mark a note as favorite", description="Marks a note as favorite in the database.")
 @limiter.limit("20/minute")
-def favorite_note(request: Request, IDs = NoteFavorite, db: Session = Depends(get_db), current_user: UUID = Depends(get_current_user)):
+def favorite_note(request: Request, IDs: NoteFavorite, db: Session = Depends(get_db), current_user: UUID = Depends(get_current_user)):
     """Marks a note as favorite in the database."""
-    note = note_service.favorite_note(db=db, book_id=IDs.book_id, note_id=IDs.note_id, user_id=current_user)
+    note = note_service.toggle_favorite(db=db, book_id=IDs.book_id, note_id=IDs.id, user_id=current_user)
     if not note:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Note not found")
-    logger.info("Note marked as favorite | Note ID: %s | Book ID: %s | User ID: %s", IDs.note_id, IDs.book_id, current_user)
+    logger.info("Note marked as favorite | Note ID: %s | Book ID: %s | User ID: %s", IDs.id, IDs.book_id, current_user)
     return note
 
 @router.post("/archive", response_model=NoteResponse, summary="Archive a note", description="Archives a note in the database.")
 @limiter.limit("20/minute")
-def archive_note(request: Request, IDs = NoteArchive, db: Session = Depends(get_db), current_user: UUID = Depends(get_current_user)):
+def archive_note(request: Request, IDs: NoteArchive, db: Session = Depends(get_db), current_user: UUID = Depends(get_current_user)):
     """Archives a note in the database."""
-    note = note_service.archive_note(db=db, book_id=IDs.book_id, note_id=IDs.note_id, user_id=current_user)
+    note = note_service.toggle_archive(db=db, book_id=IDs.book_id, note_id=IDs.id, user_id=current_user)
     if not note:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Note not found")
-    logger.info("Note archived | Note ID: %s | Book ID: %s | User ID: %s", IDs.note_id, IDs.book_id, current_user)
+    logger.info("Note archived | Note ID: %s | Book ID: %s | User ID: %s", IDs.id, IDs.book_id, current_user)
     return note
 
 @router.post("/publish", response_model=NoteResponse, summary="Publish a note", description="Publishes a note in the database.")
 @limiter.limit("20/minute")
-def publish_note(request: Request, IDs = NotePublish, db: Session = Depends(get_db), current_user: UUID = Depends(get_current_user)):
+def publish_note(request: Request, IDs: NotePublish, db: Session = Depends(get_db), current_user: UUID = Depends(get_current_user)):
     """Publishes a note in the database."""
-    note = note_service.publish_note(db=db, book_id=IDs.book_id, note_id=IDs.note_id, user_id=current_user)
+    note = note_service.toggle_public(db=db, book_id=IDs.book_id, note_id=IDs.id, user_id=current_user)
     if not note:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Note not found")
-    logger.info("Note published | Note ID: %s | Book ID: %s | User ID: %s", IDs.note_id, IDs.book_id, current_user)
+    logger.info("Note published | Note ID: %s | Book ID: %s | User ID: %s", IDs.id, IDs.book_id, current_user)
     return note
-
-@router.get("/public_notes", response_model=NotesResponse, summary="Get public notes", description="Retrieves public notes from the database with pagination.")
-@limiter.limit("20/minute")
-def get_public_notes(request: Request, book_id: UUID, page: int = Query(1, ge=1), page_size: int = Query(25, ge=1, le=100), db: Session = Depends(get_db), current_user: UUID = Depends(get_current_user)):
-    """Retrieves public notes with pagination."""
-    notes = note_service.get_public_notes(db=db, book_id=book_id, page=page, page_size=page_size)
-    logger.info("Public notes retrieved | Book ID: %s | Page: %d | Count: %d", book_id, page, len(notes))
-    return notes

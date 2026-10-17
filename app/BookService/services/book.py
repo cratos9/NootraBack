@@ -45,10 +45,11 @@ def get_book_by_id(db:Session, book_id: UUID, user_id: UUID) -> Book | None:
     except RedisError as e:
         logger.error("Redis error while fetching book ID: %s | User ID: %s | Error: %s", book_id, user_id, e)
     response = book_repo.get_by_id(db=db, book_id=book_id, user_id=user_id)
-    try:
-        redis_client.setex(cache_key, settings.redis_cache_expire, response.model_dump_json())
-    except RedisError as e:
-        logger.error("Redis error while caching book ID: %s | User ID: %s | Error: %s", book_id, user_id, e)
+    if response:
+        try:
+            redis_client.setex(cache_key, settings.redis_cache_expire, BookResponse.model_validate(response).model_dump_json())
+        except RedisError as e:
+            logger.error("Redis error while caching book ID: %s | User ID: %s | Error: %s", book_id, user_id, e)
     return response
 
 def update_book(db: Session, book_id: UUID, book_data: BookUpdate, user_id: UUID) -> Book | None:

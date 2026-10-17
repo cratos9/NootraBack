@@ -25,7 +25,7 @@ def create_book(request: Request, book_data: BookCreate, db: Session = Depends(g
 def get_books(request: Request,page: int = Query(1, ge=1), page_size: int = Query(25, ge=1, le=100), db: Session = Depends(get_db), current_user: UUID = Depends(get_current_user)):
     """Retrieves all books from the database."""
     books = book_service.get_active_books(db=db, user_id=current_user, page=page, page_size=page_size)
-    logger.info("Books retrieved | User ID: %s | Count: %d", current_user, len(books))
+    logger.info("Books retrieved | User ID: %s | Count: %d", current_user, len(books.books))
     return books
 
 @router.get("/archived", response_model=BooksResponse, summary="Get archived books", description="Retrieves archived books from the database with pagination.")
@@ -33,7 +33,15 @@ def get_books(request: Request,page: int = Query(1, ge=1), page_size: int = Quer
 def get_archived_books(request: Request, page: int = Query(1, ge=1), page_size: int = Query(25, ge=1, le=100), db: Session = Depends(get_db), current_user: UUID = Depends(get_current_user)):
     """Retrieves archived books with pagination."""
     books = book_service.get_archived_books(db=db, user_id=current_user, page=page, page_size=page_size)
-    logger.info("Archived books retrieved | User ID: %s | Page: %d | Count: %d", current_user, page, len(books))
+    logger.info("Archived books retrieved | User ID: %s | Page: %d | Count: %d", current_user, page, len(books.books))
+    return books
+
+@router.get("/public_books", response_model=BooksResponse, summary="Get public books", description="Retrieves public books from the database with pagination.")
+@limiter.limit("20/minute")
+def get_public_books(request: Request, page: int = Query(1, ge=1), page_size: int = Query(25, ge=1, le=100), db: Session = Depends(get_db), current_user: UUID = Depends(get_current_user)):
+    """Retrieves public books with pagination."""
+    books = book_service.get_public_books(db=db, page=page, page_size=page_size)
+    logger.info("Public books retrieved | Page: %d | Count: %d", page, len(books.books))
     return books
 
 @router.get("/{book_id}", response_model=BookResponse, summary="Get a book by ID", description="Retrieves a specific book by its ID.")
@@ -70,36 +78,28 @@ def delete_book(request: Request, book_id: UUID, db: Session = Depends(get_db), 
 @limiter.limit("20/minute")
 def favorite_book(request: Request, book_id: BookFavorite, db: Session = Depends(get_db), current_user: UUID = Depends(get_current_user)):
     """Marks a book as favorite."""
-    book = book_service.favorite_book(db=db, book_id=book_id, user_id=current_user)
+    book = book_service.toggle_favorite(db=db, book_id=book_id.id, user_id=current_user)
     if not book:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Book not found")
-    logger.info("Book favorited | Book ID: %s | User ID: %s", book_id, current_user)
+    logger.info("Book favorited | Book ID: %s | User ID: %s", book_id.id, current_user)
     return book
 
 @router.post("/archive", response_model=BookResponse, summary="Archive a book", description="Archives a specific book for the current user.")
 @limiter.limit("20/minute")
 def archive_book(request: Request, book_id: BookArchive, db: Session = Depends(get_db), current_user: UUID = Depends(get_current_user)):
     """Archives a book."""
-    book = book_service.archive_book(db=db, book_id=book_id, user_id=current_user)
+    book = book_service.toggle_archive(db=db, book_id=book_id.id, user_id=current_user)
     if not book:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Book not found")
-    logger.info("Book archived | Book ID: %s | User ID: %s", book_id, current_user)
+    logger.info("Book archived | Book ID: %s | User ID: %s", book_id.id, current_user)
     return book
 
 @router.post("/publish", response_model=BookResponse, summary="Make a book public", description="Makes a specific book public for all users.")
 @limiter.limit("20/minute")
 def public_book(request: Request, book_id: BookPublish, db: Session = Depends(get_db), current_user: UUID = Depends(get_current_user)):
     """Makes a book public."""
-    book = book_service.public_book(db=db, book_id=book_id, user_id=current_user)
+    book = book_service.toggle_public(db=db, book_id=book_id.id, user_id=current_user)
     if not book:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Book not found")
-    logger.info("Book made public | Book ID: %s | User ID: %s", book_id, current_user)
+    logger.info("Book made public | Book ID: %s | User ID: %s", book_id.id, current_user)
     return book
-
-@router.get("/public_books", response_model=BooksResponse, summary="Get public books", description="Retrieves public books from the database with pagination.")
-@limiter.limit("20/minute")
-def get_public_books(request: Request, page: int = Query(1, ge=1), page_size: int = Query(25, ge=1, le=100), db: Session = Depends(get_db), current_user: UUID = Depends(get_current_user)):
-    """Retrieves public books with pagination."""
-    books = book_service.get_public_books(db=db, page=page, page_size=page_size)
-    logger.info("Public books retrieved | Page: %d | Count: %d", page, len(books))
-    return books

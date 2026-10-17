@@ -72,7 +72,7 @@ class BookResponse(BaseModel):
     is_public: bool
     is_archived: bool
     is_favorite: bool
-    order_count: int
+    order_count: int = Field(validation_alias="order_index")
     
     # Statistics about the book
     view_count: int
