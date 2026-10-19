@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     jwt_algorithm: str
     jwt_issuer: str
     jwt_audience: str
+    encryption_key: str
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", case_sensitive=False)
     
 settings = Settings()
