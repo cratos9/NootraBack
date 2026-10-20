@@ -8,5 +8,6 @@ namespace AuthService.Services
         Task<AuthResponseDto> RegisterAsync(CreateUserDto createUserDto);
         Task<AuthResponseDto> RefreshTokenAsync(RefreshTokenRequestDto refreshTokenDto);
         Task LogoutAsync(string refreshToken);
+        Task<AccountResponseDto> GetAccountAsync(Guid userId);
     }
 }

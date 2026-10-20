@@ -4,6 +4,7 @@ using FluentValidation;
 using AuthService.Dtos;
 using AuthService.Services;
 using Microsoft.AspNetCore.Authorization;
+using System.Security.Claims;
 
 namespace AuthService.Controllers
 {
@@ -93,6 +94,31 @@ namespace AuthService.Controllers
             catch (Exception)
             {
                 return BadRequest(new { message = "An error occurred while processing the request." });
+            }
+        }
+
+        [Authorize]
+        [HttpGet("account")]
+        public async Task<ActionResult<AccountResponseDto>> GetMyAccount()
+        {
+            var userIdClaims = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub");
+            if (!Guid.TryParse(userIdClaims, out var userId))
+            {
+                return Unauthorized(new { message = "Invalid user ID in token." });
+            }
+
+            try
+            {
+                var result = await _authService.GetAccountAsync(userId);
+                return Ok(result);
+            }
+            catch (KeyNotFoundException)
+            {
+                return NotFound(new { message = "User not found." });
+            }
+            catch (Exception)
+            {
+                return StatusCode(500, new { message = "An error occurred while processing the request." });
             }
         }
 
