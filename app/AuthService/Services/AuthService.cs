@@ -97,6 +97,36 @@ namespace AuthService.Services
             return BuildAuthResponse(user, accessToken, newRefreshToken);
         }
 
+        public async Task<AccountResponseDto> GetAccountAsync(Guid userId)
+        {
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == userId);
+            if (user == null)
+            {
+                throw new KeyNotFoundException("User not found.");
+            }
+
+            return new AccountResponseDto
+            {
+                Username = user.Username,
+                Email = user.Email,
+                FullName = user.FullName,
+                Biography = user.Biography,
+                ProfilePictureUrl = user.ProfilePictureUrl,
+                PhoneNumber = user.PhoneNumber,
+                Country = user.Country,
+                City = user.City,
+                Institution = user.Institution,
+                Career = user.Career,
+                StudentId = user.StudentId,
+                IsActive = user.IsActive,
+                IsVerified = user.IsVerified,
+                IsEmailVerified = user.IsEmailVerified,
+                CreatedAt = user.CreatedAt,
+                UpdatedAt = user.UpdatedAt,
+                LastLogin = user.LastLogin
+            };
+        }
+
         private AuthResponseDto BuildAuthResponse(UserEntity user, string accessToken, string refreshToken)
         {
             return new AuthResponseDto
