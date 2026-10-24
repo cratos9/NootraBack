@@ -7,7 +7,7 @@ namespace AuthService.Services
         Task<AuthResponseDto> LoginAsync(LoginUserDto loginUserDto);
         Task<AuthResponseDto> RegisterAsync(CreateUserDto createUserDto);
         Task<AuthResponseDto> RefreshTokenAsync(RefreshTokenRequestDto refreshTokenDto);
-        Task LogoutAsync(string refreshToken);
+        Task LogoutAsync(string accessToken);
         Task<AccountResponseDto> GetAccountAsync(Guid userId);
     }
 }

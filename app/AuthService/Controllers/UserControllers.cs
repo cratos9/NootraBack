@@ -1,10 +1,12 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.EntityFrameworkCore;
 using FluentValidation;
 using AuthService.Dtos;
 using AuthService.Services;
-using Microsoft.AspNetCore.Authorization;
 using System.Security.Claims;
+using Npgsql;
 
 namespace AuthService.Controllers
 {
@@ -16,36 +18,44 @@ namespace AuthService.Controllers
         private readonly IValidator<CreateUserDto> _createUserValidator;
         private readonly IValidator<RefreshTokenRequestDto> _refreshTokenValidator;
         private readonly IValidator<LoginUserDto> _loginValidator;
+        private readonly ILogger<UserController> _logger;
 
-        public UserController(IAuthService authService, IValidator<CreateUserDto> createUserValidator, IValidator<RefreshTokenRequestDto> refreshTokenValidator, IValidator<LoginUserDto> loginValidator)
+        public UserController(IAuthService authService, IValidator<CreateUserDto> createUserValidator, IValidator<RefreshTokenRequestDto> refreshTokenValidator, IValidator<LoginUserDto> loginValidator, ILogger<UserController> logger)
         {
             _authService = authService;
             _createUserValidator = createUserValidator;
             _refreshTokenValidator = refreshTokenValidator;
             _loginValidator = loginValidator;
+            _logger = logger;
         }
 
         [EnableRateLimiting("registerPerIp")]
         [HttpPost("register")]
         public async Task<ActionResult<AuthResponseDto>> Register([FromBody] CreateUserDto createUserDto)
         {
+            var validationResult = await _createUserValidator.ValidateAsync(createUserDto);
+            if (!validationResult.IsValid)
+            {
+                return BadRequest(new { message = "Validation failed", errors = validationResult.Errors.Select(error => error.ErrorMessage)});
+            }
+
             try
             {
-                var validationResult = await _createUserValidator.ValidateAsync(createUserDto);
-                if (!validationResult.IsValid)
-                {
-                    return BadRequest( new { message = "Validation failed", errors = validationResult.Errors.Select(error => error.ErrorMessage) });
-                }
-
                 var result = await _authService.RegisterAsync(createUserDto);
                 return Ok(result);
             }
             catch (InvalidOperationException ex)
             {
                 return Conflict(new { message = ex.Message });
-            } catch (Exception)
+            }
+            catch (DbUpdateException ex) when (ex.InnerException is PostgresException postgresEx && postgresEx.SqlState == PostgresErrorCodes.UniqueViolation)
             {
-                return BadRequest(new { message = "An error occurred while processing the request." });
+                return Conflict(new { message = "Username or email already exists."});
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error registering a user.");
+                return StatusCode(500, new { message = "An unexpected error occurred."});
             }
         }
 
@@ -53,35 +63,39 @@ namespace AuthService.Controllers
         [HttpPost("login")]
         public async Task<ActionResult<AuthResponseDto>> Login([FromBody] LoginUserDto loginUserDto)
         {
+            var validationResult = await _loginValidator.ValidateAsync(loginUserDto);
+            if (!validationResult.IsValid)
+            {
+                return BadRequest(new { message = "Validation failed", errors = validationResult.Errors.Select(error => error.ErrorMessage)});
+            }
+
             try
             {
-                var validationResult = await _loginValidator.ValidateAsync(loginUserDto);
-                if (!validationResult.IsValid)
-                {
-                    return BadRequest( new { message = "Validation failed", errors = validationResult.Errors.Select(error => error.ErrorMessage) });
-                }
-
-                var result = await _authService.LoginAsync(loginUserDto);
+                var result =await _authService.LoginAsync(loginUserDto);
                 return Ok(result);
             }
             catch (UnauthorizedAccessException ex)
             {
                 return Unauthorized(new { message = ex.Message });
             }
-            catch (InvalidOperationException ex)
+            catch (Exception ex)
             {
-                return Conflict(new { message = ex.Message });
-            } catch (Exception)
-            {
-                return BadRequest(new { message = "An error occurred while processing the request." });
+                _logger.LogError(ex, "Error logging in a user.");
+                return StatusCode(500, new { message = "An unexpected error occurred."});
             }
         }
 
-        [Authorize]
+        [AllowAnonymous]
         [EnableRateLimiting("refreshPerIp")]
         [HttpPost("refresh")]
-        public async Task<IActionResult> Refresh ([FromBody] RefreshTokenRequestDto refreshTokenRequestDto)
+        public async Task<IActionResult> Refresh([FromBody] RefreshTokenRequestDto refreshTokenRequestDto)
         {
+            var validationResult = await _refreshTokenValidator.ValidateAsync(refreshTokenRequestDto);
+            if (!validationResult.IsValid)
+            {
+                return BadRequest(new { message = "Validation failed", errors = validationResult.Errors.Select(error => error.ErrorMessage)});
+            }
+
             try
             {
                 var result = await _authService.RefreshTokenAsync(refreshTokenRequestDto);
@@ -91,9 +105,10 @@ namespace AuthService.Controllers
             {
                 return Unauthorized(new { message = ex.Message });
             }
-            catch (Exception)
+            catch (Exception ex)
             {
-                return BadRequest(new { message = "An error occurred while processing the request." });
+                _logger.LogError(ex, "Error refreshing a token.");
+                return StatusCode(500, new { message = "An unexpected error occurred."});
             }
         }
 
@@ -116,9 +131,10 @@ namespace AuthService.Controllers
             {
                 return NotFound(new { message = "User not found." });
             }
-            catch (Exception)
+            catch (Exception ex)
             {
-                return StatusCode(500, new { message = "An error occurred while processing the request." });
+                _logger.LogError(ex, "Error retrieving account.");
+                return StatusCode(500, new { message = "An unexpected error occurred."});
             }
         }
 
@@ -127,14 +143,31 @@ namespace AuthService.Controllers
         public async Task<IActionResult> Logout()
         {
             var authorization = Request.Headers.Authorization.ToString();
-            if (authorization.StartsWith("Bearer "))
+            if (string.IsNullOrWhiteSpace(authorization) || !authorization.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
             {
-                return Unauthorized(new { message = "Access token is required for logout." });
+                return Unauthorized(new { message = "A Bearer access token is required."});
             }
 
-            var token = authorization["Bearer ".Length..];
-            await _authService.LogoutAsync(token);
-            return Ok(new { message = "Logged out successfully." });
+            var accessToken = authorization["Bearer ".Length..].Trim();
+            if (string.IsNullOrWhiteSpace(accessToken))
+            {
+                return Unauthorized(new { message = "A Bearer access token is required."});
+            }
+
+            try
+            {
+                await _authService.LogoutAsync(accessToken);
+                return Ok(new { message = "Logged out successfully."});
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                return Unauthorized(new { message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error logging out a user.");
+                return StatusCode(500, new { message = "An unexpected error occurred."});
+            }
         }
     }
 }

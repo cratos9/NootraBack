@@ -9,35 +9,56 @@ namespace AuthService.Services
 {
     public class JwtService : IJwtService
     {
-        private readonly IConfiguration _configuration;
+        private readonly string _key;
+        private readonly string _issuer;
+        private readonly string _audience;
+        private readonly double _durationInMinutes;
 
         public JwtService(IConfiguration configuration)
         {
-            _configuration = configuration;
+            _key = configuration["Jwt:Key"]?? throw new InvalidOperationException("JWT signing key is not configured.");
+            _issuer = configuration["Jwt:Issuer"]?? throw new InvalidOperationException("JWT issuer is not configured.");
+            _audience = configuration["Jwt:Audience"]?? throw new InvalidOperationException("JWT audience is not configured.");
+
+            if (!double.TryParse(configuration["Jwt:DurationInMinutes"], out _durationInMinutes) || _durationInMinutes <= 0)
+            {
+                throw new InvalidOperationException("JWT duration must be a positive number.");
+            }
+
+            if (Encoding.UTF8.GetByteCount(_key) < 32)
+            {
+                throw new InvalidOperationException("JWT signing key must contain at least 32 bytes.");
+            }
         }
 
-        public string GenerateAccessToken(UserEntity user)
+        public AccessTokenResult GenerateAccessToken(UserEntity user)
         {
+            var now = DateTime.UtcNow;
+            var expiration = now.AddMinutes(_durationInMinutes);
+
             var claims = new[]
             {
-                new Claim(JwtRegisteredClaimNames.Sub, user.Id.ToString()),
-                new Claim(JwtRegisteredClaimNames.UniqueName, user.Username),
-                new Claim(JwtRegisteredClaimNames.Email, user.Email),
-                new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
+                new Claim(JwtRegisteredClaimNames.Sub,user.Id.ToString()),
+                new Claim(JwtRegisteredClaimNames.UniqueName,user.Username),
+                new Claim(JwtRegisteredClaimNames.Email,user.Email),
+                new Claim(JwtRegisteredClaimNames.Jti,Guid.NewGuid().ToString())
             };
 
-            var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_configuration["Jwt:Key"]!));
-            var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
+            var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_key));
+
+            var credentials = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
 
             var token = new JwtSecurityToken(
-                issuer: _configuration["Jwt:Issuer"],
-                audience: _configuration["Jwt:Audience"],
+                issuer: _issuer,
+                audience: _audience,
                 claims: claims,
-                expires: DateTime.UtcNow.AddMinutes(double.Parse(_configuration["Jwt:DurationInMinutes"]!)),
-                signingCredentials: creds
+                notBefore: now,
+                expires: expiration,
+                signingCredentials: credentials
             );
 
-            return new JwtSecurityTokenHandler().WriteToken(token);
+            var tokenString = new JwtSecurityTokenHandler().WriteToken(token);
+            return new AccessTokenResult(tokenString, expiration);
         }
 
         public string GenerateRefreshToken()
