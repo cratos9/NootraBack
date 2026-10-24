@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using FluentValidation;
 using AuthService.Dtos;
 using AuthService.Services;
+using Microsoft.AspNetCore.Http;
 using System.Security.Claims;
 using Npgsql;
 
@@ -22,8 +23,9 @@ namespace AuthService.Controllers
         private readonly IValidator<ChangePasswordDto> _changePasswordValidator;
         private readonly IValidator<DeleteAccountDto> _deleteAccountValidator;
         private readonly IValidator<UpdateAccountDto> _updateAccountValidator;
+        private readonly IProfilePictureService _profilePictureService;
 
-        public UserController(IAuthService authService, IValidator<CreateUserDto> createUserValidator, IValidator<RefreshTokenRequestDto> refreshTokenValidator, IValidator<LoginUserDto> loginValidator, ILogger<UserController> logger, IValidator<ChangePasswordDto> changePasswordValidator, IValidator<DeleteAccountDto> deleteAccountValidator, IValidator<UpdateAccountDto> updateAccountValidator)
+        public UserController(IAuthService authService, IValidator<CreateUserDto> createUserValidator, IValidator<RefreshTokenRequestDto> refreshTokenValidator, IValidator<LoginUserDto> loginValidator, ILogger<UserController> logger, IValidator<ChangePasswordDto> changePasswordValidator, IValidator<DeleteAccountDto> deleteAccountValidator, IValidator<UpdateAccountDto> updateAccountValidator, IProfilePictureService profilePictureService)
         {
             _authService = authService;
             _createUserValidator = createUserValidator;
@@ -33,6 +35,7 @@ namespace AuthService.Controllers
             _changePasswordValidator = changePasswordValidator;
             _deleteAccountValidator = deleteAccountValidator;
             _updateAccountValidator = updateAccountValidator;
+            _profilePictureService = profilePictureService;
         }
 
         [EnableRateLimiting("registerPerIp")]
@@ -304,6 +307,90 @@ namespace AuthService.Controllers
             {
                 _logger.LogError(ex, "Error updating the account of the user {UserId}", userId);
                 return StatusCode(500, new { message = "An error occurred while updating the account."});
+            }
+        }
+
+        [Authorize]
+        [HttpPost("account/profile-picture")]
+        [Consumes("multipart/form-data")]
+        [RequestSizeLimit(6 * 1024 * 1024)]
+        public async Task<IActionResult> UploadProfilePicture(IFormFile file)
+        {
+            var userIdValue = User.FindFirst("sub")?.Value ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (!Guid.TryParse(userIdValue, out var userId))
+            {
+                return Unauthorized(new { message = "User ID is invalid."});
+            }
+
+            try
+            {
+                var pictureUrl = await _profilePictureService.UploadAsync(userId, file);
+                return Ok(new {message = "Profile picture updated successfully.", profilePictureUrl = pictureUrl});
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return NotFound(new { message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "An error occurred while uploading the profile picture for user {UserId}", userId);
+                return StatusCode(500, new { message = "An error occurred while saving the profile picture."});
+            }
+        }
+
+        [Authorize]
+        [HttpGet("account/profile-picture")]
+        public async Task<IActionResult> GetProfilePicture()
+        {
+            var userIdValue = User.FindFirst("sub")?.Value ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (!Guid.TryParse(userIdValue, out var userId))
+            {
+                return Unauthorized(new { message = "User ID is invalid."});
+            }
+
+            try
+            {
+                var pictureUrl = await _profilePictureService.GetCurrentPictureUrlAsync(userId);
+                return Ok(new { profilePictureUrl = pictureUrl});
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return NotFound(new { message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "An error occurred while consulting the profile picture for user {UserId}", userId);
+                return StatusCode(500, new { message = "An error occurred while consulting the profile picture."});
+            }
+        }
+
+        [Authorize]
+        [HttpDelete("account/profile-picture")]
+        public async Task<IActionResult> DeleteProfilePicture()
+        {
+            var userIdValue = User.FindFirst("sub")?.Value ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (!Guid.TryParse(userIdValue, out var userId))
+            {
+                return Unauthorized(new { message = "User ID is invalid."});
+            }
+
+            try
+            {
+                await _profilePictureService.DeleteAsync(userId);
+                return Ok(new {message = "Profile picture deleted successfully. The default image will be used.", profilePictureUrl = "/images/default.png"});
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return NotFound(new { message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "An error occurred while deleting the profile picture for user {UserId}", userId);
+                return StatusCode(500, new { message = "An error occurred while deleting the profile picture."});
             }
         }
     }

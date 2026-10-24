@@ -43,11 +43,6 @@ namespace AuthService.Validators
                 .WithMessage("The biography cannot exceed 2000 characters.")
                 .When(x => x.Biography is not null);
 
-            RuleFor(x => x.ProfilePictureUrl)
-                .MaximumLength(255)
-                .WithMessage("The URL of the image cannot exceed 255 characters.")
-                .When(x => x.ProfilePictureUrl is not null);
-
             RuleFor(x => x.PhoneNumber)
                 .MaximumLength(30)
                 .WithMessage("The phone number cannot exceed 30 characters.")

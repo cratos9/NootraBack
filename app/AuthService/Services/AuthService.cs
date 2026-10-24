@@ -282,7 +282,6 @@ namespace AuthService.Services
 
             if (dto.FullName is not null)user.FullName = dto.FullName;
             if (dto.Biography is not null)user.Biography = dto.Biography;
-            if (dto.ProfilePictureUrl is not null)user.ProfilePictureUrl = dto.ProfilePictureUrl;
             if (dto.PhoneNumber is not null)user.PhoneNumber = dto.PhoneNumber;
             if (dto.Country is not null)user.Country = dto.Country;
             if (dto.City is not null)user.City = dto.City;
