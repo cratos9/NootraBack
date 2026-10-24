@@ -19,14 +19,16 @@ namespace AuthService.Controllers
         private readonly IValidator<RefreshTokenRequestDto> _refreshTokenValidator;
         private readonly IValidator<LoginUserDto> _loginValidator;
         private readonly ILogger<UserController> _logger;
+        private readonly IValidator<ChangePasswordDto> _changePasswordValidator;
 
-        public UserController(IAuthService authService, IValidator<CreateUserDto> createUserValidator, IValidator<RefreshTokenRequestDto> refreshTokenValidator, IValidator<LoginUserDto> loginValidator, ILogger<UserController> logger)
+        public UserController(IAuthService authService, IValidator<CreateUserDto> createUserValidator, IValidator<RefreshTokenRequestDto> refreshTokenValidator, IValidator<LoginUserDto> loginValidator, ILogger<UserController> logger, IValidator<ChangePasswordDto> changePasswordValidator)
         {
             _authService = authService;
             _createUserValidator = createUserValidator;
             _refreshTokenValidator = refreshTokenValidator;
             _loginValidator = loginValidator;
             _logger = logger;
+            _changePasswordValidator = changePasswordValidator;
         }
 
         [EnableRateLimiting("registerPerIp")]
@@ -167,6 +169,54 @@ namespace AuthService.Controllers
             {
                 _logger.LogError(ex, "Error logging out a user.");
                 return StatusCode(500, new { message = "An unexpected error occurred."});
+            }
+        }
+
+        [Authorize]
+        [HttpPut("password")]
+        public async Task<IActionResult> ChangePassword([FromBody] ChangePasswordDto dto)
+        {
+            var validation = await _changePasswordValidator.ValidateAsync(dto);
+            if (!validation.IsValid)
+            {
+                return BadRequest(new { message = "The provided data is not valid.", errors = validation.Errors.Select(e => e.ErrorMessage)});
+            }
+
+            var userIdValue = User.FindFirst("sub")?.Value?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (!Guid.TryParse(userIdValue, out var userId))
+            {
+                return Unauthorized(new { message = "Invalid user ID in token."});
+            }
+
+            var authorization = Request.Headers.Authorization.ToString();
+            if (!authorization.StartsWith( "Bearer ", StringComparison.OrdinalIgnoreCase))
+            {
+                return Unauthorized(new { message = "A valid access token is required."});
+            }
+
+            var accessToken = authorization["Bearer ".Length..].Trim();
+
+            try
+            {
+                await _authService.ChangePasswordAsync(userId, dto, accessToken);
+                return Ok(new { message = "Password changed successfully. Please log in again with your new password."});
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                return Unauthorized(new { message = ex.Message });
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return NotFound(new { message = ex.Message });
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error changing the password of the user {UserId}", userId);
+                return StatusCode(500, new { message = "An error occurred while changing the password."});
             }
         }
     }

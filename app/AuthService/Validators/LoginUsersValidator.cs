@@ -8,12 +8,12 @@ namespace AuthService.Validators
         public LoginUserValidator()
         {
             RuleFor(x => x.Email)
-                .NotEmpty().WithMessage("El correo electrónico es obligatorio.")
-                .EmailAddress().WithMessage("El correo electrónico no es válido.");
+                .NotEmpty().WithMessage("The email is required.")
+                .EmailAddress().WithMessage("The email address is not valid.");
 
             RuleFor(x => x.Password)
-                .NotEmpty().WithMessage("La contraseña es obligatoria.")
-                .MinimumLength(6).WithMessage("La contraseña debe tener al menos 6 caracteres.");
+                .NotEmpty().WithMessage("The password is required.")
+                .MinimumLength(6).WithMessage("The password must be at least 6 characters.");
         }
     }
 }

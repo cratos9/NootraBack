@@ -204,5 +204,33 @@ namespace AuthService.Services
                 Expiration = accessToken.Expiration
             };
         }
+
+        public async Task ChangePasswordAsync(Guid userId, ChangePasswordDto dto, string accessToken)
+        {       
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == userId && u.IsActive);
+            if (user is null)
+            {
+                throw new KeyNotFoundException("The user was not found or is inactive.");
+            }
+
+            if (!BCrypt.Net.BCrypt.Verify(dto.CurrentPassword, user.PasswordHash))
+            {
+                throw new UnauthorizedAccessException("The current password is incorrect.");
+            }
+
+            if (BCrypt.Net.BCrypt.Verify(dto.NewPassword, user.PasswordHash))
+            {
+                throw new ArgumentException("The new password must be different from the current password.");
+            }
+
+            await LogoutAsync(accessToken);
+
+            user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(dto.NewPassword);
+            user.UpdatedAt = DateTime.UtcNow;
+            user.RefreshToken = null;
+            user.RefreshTokenExpiryAt = null;
+
+            await _context.SaveChangesAsync();
+        }
     }
 }
