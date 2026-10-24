@@ -232,5 +232,23 @@ namespace AuthService.Services
 
             await _context.SaveChangesAsync();
         }
+
+        public async Task DeleteAccountAsync(Guid userId, DeleteAccountDto dto, string accessToken)
+        {
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == userId && u.IsActive);
+            if (user is null)
+            {
+                throw new KeyNotFoundException("The account does not exist or has already been deleted.");
+            }
+
+            if (!BCrypt.Net.BCrypt.Verify(dto.Password, user.PasswordHash))
+            {
+                throw new UnauthorizedAccessException("The password is incorrect.");
+            }
+
+            await LogoutAsync(accessToken);
+            _context.Users.Remove(user);
+            await _context.SaveChangesAsync();
+        }
     }
 }

@@ -20,8 +20,9 @@ namespace AuthService.Controllers
         private readonly IValidator<LoginUserDto> _loginValidator;
         private readonly ILogger<UserController> _logger;
         private readonly IValidator<ChangePasswordDto> _changePasswordValidator;
+        private readonly IValidator<DeleteAccountDto> _deleteAccountValidator;
 
-        public UserController(IAuthService authService, IValidator<CreateUserDto> createUserValidator, IValidator<RefreshTokenRequestDto> refreshTokenValidator, IValidator<LoginUserDto> loginValidator, ILogger<UserController> logger, IValidator<ChangePasswordDto> changePasswordValidator)
+        public UserController(IAuthService authService, IValidator<CreateUserDto> createUserValidator, IValidator<RefreshTokenRequestDto> refreshTokenValidator, IValidator<LoginUserDto> loginValidator, ILogger<UserController> logger, IValidator<ChangePasswordDto> changePasswordValidator, IValidator<DeleteAccountDto> deleteAccountValidator)
         {
             _authService = authService;
             _createUserValidator = createUserValidator;
@@ -29,6 +30,7 @@ namespace AuthService.Controllers
             _loginValidator = loginValidator;
             _logger = logger;
             _changePasswordValidator = changePasswordValidator;
+            _deleteAccountValidator = deleteAccountValidator;
         }
 
         [EnableRateLimiting("registerPerIp")]
@@ -217,6 +219,49 @@ namespace AuthService.Controllers
             {
                 _logger.LogError(ex, "Error changing the password of the user {UserId}", userId);
                 return StatusCode(500, new { message = "An error occurred while changing the password."});
+            }
+        }
+
+        [Authorize]
+        [HttpDelete("account")]
+        public async Task<IActionResult> DeleteAccount([FromBody] DeleteAccountDto dto)
+        {
+            var validation = await _deleteAccountValidator.ValidateAsync(dto);
+            if (!validation.IsValid)
+            {
+                return BadRequest(new {message = "Data provided is not valid.", errors = validation.Errors.Select(e => e.ErrorMessage)});
+            }
+
+            var userIdValue = User.FindFirst("sub")?.Value?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (!Guid.TryParse(userIdValue, out var userId))
+            {
+                return Unauthorized(new {message = "Invalid user ID in token."});
+            }
+
+            var authorization = Request.Headers.Authorization.ToString();
+            if (!authorization.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
+            {
+                return Unauthorized(new {message = "A valid access token is required."});
+            }
+
+            var accessToken = authorization["Bearer ".Length..].Trim();
+            try
+            {
+                await _authService.DeleteAccountAsync(userId, dto, accessToken);
+                return Ok(new { message = "Account deleted successfully."});
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                return Unauthorized(new { message = ex.Message });
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return NotFound(new { message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error deleting the account of the user {UserId}", userId);
+                return StatusCode(500, new {message = "An error occurred while deleting the account."});
             }
         }
     }
