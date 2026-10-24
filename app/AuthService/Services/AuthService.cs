@@ -28,12 +28,19 @@ namespace AuthService.Services
                 throw new UnauthorizedAccessException("Invalid email or password.");
             }
 
+            if (!user.IsActive)
+            {
+                throw new UnauthorizedAccessException("This account is inactive.");
+            }
+
             var accessToken = _jwt.GenerateAccessToken(user);
             var refreshToken = _jwt.GenerateRefreshToken();
+            var now = DateTime.UtcNow;
 
-            user.LastLogin = DateTime.UtcNow;
+            user.LastLogin = now;
             user.RefreshToken = refreshToken;
-            user.RefreshTokenExpiryAt = DateTime.UtcNow.AddDays(7);
+            user.RefreshTokenExpiryAt = now.AddDays(7);
+
             await _context.SaveChangesAsync();
 
             return BuildAuthResponse(user, accessToken, refreshToken);
@@ -47,11 +54,13 @@ namespace AuthService.Services
                 throw new InvalidOperationException("Email already exists.");
             }
 
-            var useranameExists = await _context.Users.AnyAsync(u => u.Username == createUserDto.Username);
-            if (useranameExists)
+            var usernameExists = await _context.Users.AnyAsync(u => u.Username == createUserDto.Username);
+            if (usernameExists)
             {
                 throw new InvalidOperationException("Username already exists.");
             }
+
+            var now = DateTime.UtcNow;
 
             var user = new UserEntity
             {
@@ -60,20 +69,19 @@ namespace AuthService.Services
                 Email = createUserDto.Email,
                 PasswordHash = BCrypt.Net.BCrypt.HashPassword(createUserDto.Password),
                 FullName = createUserDto.FullName,
-                CreatedAt = DateTime.UtcNow,
+                CreatedAt = now,
                 IsActive = true,
                 IsVerified = false,
                 IsEmailVerified = false
             };
 
-            _context.Users.Add(user);
-            await _context.SaveChangesAsync();
-
             var accessToken = _jwt.GenerateAccessToken(user);
             var refreshToken = _jwt.GenerateRefreshToken();
 
             user.RefreshToken = refreshToken;
-            user.RefreshTokenExpiryAt = DateTime.UtcNow.AddDays(7);
+            user.RefreshTokenExpiryAt = now.AddDays(7);
+
+            _context.Users.Add(user);
             await _context.SaveChangesAsync();
 
             return BuildAuthResponse(user, accessToken, refreshToken);
@@ -81,20 +89,73 @@ namespace AuthService.Services
 
         public async Task<AuthResponseDto> RefreshTokenAsync(RefreshTokenRequestDto refreshTokenRequestDto)
         {
-            var user = await _context.Users.FirstOrDefaultAsync(u => u.RefreshToken == refreshTokenRequestDto.RefreshToken);
-            if (user == null || user.RefreshTokenExpiryAt < DateTime.UtcNow)
+            var currentRefreshToken = refreshTokenRequestDto.RefreshToken;
+            var now = DateTime.UtcNow;
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.RefreshToken == currentRefreshToken);
+            if (user == null || !user.IsActive || !user.RefreshTokenExpiryAt.HasValue || user.RefreshTokenExpiryAt.Value <= now)
             {
                 throw new UnauthorizedAccessException("Invalid or expired refresh token.");
             }
 
             var accessToken = _jwt.GenerateAccessToken(user);
             var newRefreshToken = _jwt.GenerateRefreshToken();
+            var newRefreshTokenExpiry = now.AddDays(7);
+
+            var updatedRows = await _context.Users
+                .Where(u => u.Id == user.Id && u.IsActive && u.RefreshToken == currentRefreshToken && u.RefreshTokenExpiryAt.HasValue && u.RefreshTokenExpiryAt.Value > now)
+                .ExecuteUpdateAsync(setters => setters.SetProperty(u => u.RefreshToken, newRefreshToken)
+                    .SetProperty(u => u.RefreshTokenExpiryAt, newRefreshTokenExpiry));
+            if (updatedRows == 0)
+            {
+                throw new UnauthorizedAccessException("Invalid or already used refresh token.");
+            }
 
             user.RefreshToken = newRefreshToken;
-            user.RefreshTokenExpiryAt = DateTime.UtcNow.AddDays(7);
-            await _context.SaveChangesAsync();
+            user.RefreshTokenExpiryAt = newRefreshTokenExpiry;
 
             return BuildAuthResponse(user, accessToken, newRefreshToken);
+        }
+
+        public async Task LogoutAsync(string accessToken)
+        {
+            JwtSecurityToken jwt;
+
+            try
+            {
+                jwt = new JwtSecurityTokenHandler().ReadJwtToken(accessToken);
+            }
+            catch (Exception ex) when (ex is ArgumentException || ex is FormatException)
+            {
+                throw new UnauthorizedAccessException("Invalid access token.");
+            }
+
+            var jti = jwt.Claims.FirstOrDefault(c => c.Type == JwtRegisteredClaimNames.Jti)?.Value;
+            var userIdValue = jwt.Claims.FirstOrDefault(c => c.Type == JwtRegisteredClaimNames.Sub)?.Value;
+
+            if (string.IsNullOrWhiteSpace(jti) || !Guid.TryParse(userIdValue, out var userId))
+            {
+                throw new UnauthorizedAccessException("Access token is missing required claims.");
+            }
+
+            var expiration = jwt.ValidTo - DateTime.UtcNow;
+            if (expiration <= TimeSpan.Zero)
+            {
+                throw new UnauthorizedAccessException("Access token has expired.");
+            }
+
+            var blacklistSaved = await _redisService.SetAsync($"blacklist:{jti}", "revoked", expiration);
+            if (!blacklistSaved)
+            {
+                throw new InvalidOperationException("Could not revoke the access token.");
+            }
+
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == userId);
+            if (user != null)
+            {
+                user.RefreshToken = null;
+                user.RefreshTokenExpiryAt = null;
+                await _context.SaveChangesAsync();
+            }
         }
 
         public async Task<AccountResponseDto> GetAccountAsync(Guid userId)
@@ -127,7 +188,7 @@ namespace AuthService.Services
             };
         }
 
-        private AuthResponseDto BuildAuthResponse(UserEntity user, string accessToken, string refreshToken)
+        private static AuthResponseDto BuildAuthResponse(UserEntity user, AccessTokenResult accessToken, string refreshToken)
         {
             return new AuthResponseDto
             {
@@ -136,29 +197,12 @@ namespace AuthService.Services
                     Id = user.Id,
                     Username = user.Username,
                     Email = user.Email,
-                    FullName = user.FullName,
+                    FullName = user.FullName
                 },
-                AccessToken = accessToken,
+                AccessToken = accessToken.Token,
                 RefreshToken = refreshToken,
-                Expiration = DateTime.UtcNow.AddMinutes(60)
+                Expiration = accessToken.Expiration
             };
-        }
-
-        public async Task LogoutAsync(string refreshToken)
-        {
-            var handler = new JwtSecurityTokenHandler();
-            var jwt = handler.ReadJwtToken(refreshToken);
-            var jti = jwt.Claims.First(x => x.Type == JwtRegisteredClaimNames.Jti).Value;
-            var expiration = jwt.ValidTo - DateTime.UtcNow;
-            await _redisService.SetAsync($"blacklist:{jti}", "revoked", expiration);
-            var userId = jwt.Claims.First(x => x.Type == JwtRegisteredClaimNames.Sub).Value;
-            var user = await _context.Users.FindAsync(Guid.Parse(userId));
-            if (user != null)
-            {
-                user.RefreshToken = null;
-                user.RefreshTokenExpiryAt = null;
-                await _context.SaveChangesAsync();
-            }
         }
     }
 }

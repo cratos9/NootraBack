@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using System.Text;
 
 namespace AuthService.Services
 {
@@ -7,11 +8,39 @@ namespace AuthService.Services
         private const int NonceSize = 12;
         private const int TagSize = 16;
 
+        private static byte[] GetKeyBytes(string key)
+        {
+            if (string.IsNullOrWhiteSpace(key))
+            {
+                throw new CryptographicException("Encryption key cannot be empty.");
+            }
+
+            byte[] keyBytes;
+
+            try
+            {
+                keyBytes = Convert.FromBase64String(key);
+            }
+            catch (FormatException ex)
+            {
+                throw new CryptographicException("Encryption key must be valid Base64.", ex);
+            }
+
+            if (keyBytes.Length is not (16 or 24 or 32))
+            {
+                throw new CryptographicException("AES key must contain 16, 24 or 32 bytes.");
+            }
+
+            return keyBytes;
+        }
+
         public static string Encrypt(string plainText, string key)
         {
-            byte[] keyBytes = Convert.FromBase64String(key);
+            ArgumentNullException.ThrowIfNull(plainText);
+
+            byte[] keyBytes = GetKeyBytes(key);
             byte[] nonce = RandomNumberGenerator.GetBytes(NonceSize);
-            byte[] plainBytes = System.Text.Encoding.UTF8.GetBytes(plainText);
+            byte[] plainBytes = Encoding.UTF8.GetBytes(plainText);
             byte[] cipherBytes = new byte[plainBytes.Length];
             byte[] tag = new byte[TagSize];
 
@@ -31,8 +60,19 @@ namespace AuthService.Services
 
         public static string Decrypt(string cipherText, string key)
         {
-            byte[] keyBytes = Convert.FromBase64String(key);
-            byte[] encryptedBytes = Convert.FromBase64String(cipherText);
+            ArgumentNullException.ThrowIfNull(cipherText);
+
+            byte[] keyBytes = GetKeyBytes(key);
+            byte[] encryptedBytes;
+
+            try
+            {
+                encryptedBytes = Convert.FromBase64String(cipherText);
+            }
+            catch (FormatException ex)
+            {
+                throw new CryptographicException("Encrypted data is not valid Base64.", ex);
+            }
 
             if (encryptedBytes.Length < NonceSize + TagSize)
             {
@@ -53,7 +93,7 @@ namespace AuthService.Services
                 aes.Decrypt(nonce, cipherBytes, tag, plainBytes);
             }
 
-            return System.Text.Encoding.UTF8.GetString(plainBytes);
+            return Encoding.UTF8.GetString(plainBytes);
         }
     }
 }
