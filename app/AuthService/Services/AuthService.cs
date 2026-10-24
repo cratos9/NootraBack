@@ -250,5 +250,68 @@ namespace AuthService.Services
             _context.Users.Remove(user);
             await _context.SaveChangesAsync();
         }
+
+        public async Task<AccountResponseDto> UpdateAccountAsync(Guid userId, UpdateAccountDto dto)
+        {
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == userId && u.IsActive);
+            if (user is null)
+            {
+                throw new KeyNotFoundException("The account does not exist or is inactive.");
+            }
+
+            if (dto.Username is not null && !string.Equals(user.Username, dto.Username, StringComparison.Ordinal))
+            {
+                var usernameExists = await _context.Users.AnyAsync(u => u.Username == dto.Username && u.Id != userId);
+                if (usernameExists)
+                {
+                    throw new InvalidOperationException("The username is already in use.");
+                }
+                user.Username = dto.Username;
+            }
+
+            if (dto.Email is not null && !string.Equals(user.Email, dto.Email, StringComparison.OrdinalIgnoreCase))
+            {
+                var emailExists = await _context.Users.AnyAsync(u => u.Email == dto.Email && u.Id != userId);
+                if (emailExists)
+                {
+                    throw new InvalidOperationException("The email is already registered.");
+                }
+
+                user.Email = dto.Email;
+            }
+
+            if (dto.FullName is not null)user.FullName = dto.FullName;
+            if (dto.Biography is not null)user.Biography = dto.Biography;
+            if (dto.ProfilePictureUrl is not null)user.ProfilePictureUrl = dto.ProfilePictureUrl;
+            if (dto.PhoneNumber is not null)user.PhoneNumber = dto.PhoneNumber;
+            if (dto.Country is not null)user.Country = dto.Country;
+            if (dto.City is not null)user.City = dto.City;
+            if (dto.Institution is not null)user.Institution = dto.Institution;
+            if (dto.Career is not null)user.Career = dto.Career;
+            if (dto.StudentId is not null)user.StudentId = dto.StudentId;
+            user.UpdatedAt = DateTime.UtcNow;
+
+            await _context.SaveChangesAsync();
+            return new AccountResponseDto
+            {
+                Username = user.Username,
+                Email = user.Email,
+                FullName = user.FullName,
+                Biography = user.Biography,
+                ProfilePictureUrl = user.ProfilePictureUrl,
+                PhoneNumber = user.PhoneNumber,
+                Country = user.Country,
+                City = user.City,
+                Institution = user.Institution,
+                Career = user.Career,
+                StudentId = user.StudentId,
+                IsActive = user.IsActive,
+                IsVerified = user.IsVerified,
+                IsEmailVerified = user.IsEmailVerified,
+                CreatedAt = user.CreatedAt,
+                UpdatedAt = user.UpdatedAt,
+                LastLogin = user.LastLogin
+            };
+        }
     }
 }

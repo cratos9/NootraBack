@@ -21,8 +21,9 @@ namespace AuthService.Controllers
         private readonly ILogger<UserController> _logger;
         private readonly IValidator<ChangePasswordDto> _changePasswordValidator;
         private readonly IValidator<DeleteAccountDto> _deleteAccountValidator;
+        private readonly IValidator<UpdateAccountDto> _updateAccountValidator;
 
-        public UserController(IAuthService authService, IValidator<CreateUserDto> createUserValidator, IValidator<RefreshTokenRequestDto> refreshTokenValidator, IValidator<LoginUserDto> loginValidator, ILogger<UserController> logger, IValidator<ChangePasswordDto> changePasswordValidator, IValidator<DeleteAccountDto> deleteAccountValidator)
+        public UserController(IAuthService authService, IValidator<CreateUserDto> createUserValidator, IValidator<RefreshTokenRequestDto> refreshTokenValidator, IValidator<LoginUserDto> loginValidator, ILogger<UserController> logger, IValidator<ChangePasswordDto> changePasswordValidator, IValidator<DeleteAccountDto> deleteAccountValidator, IValidator<UpdateAccountDto> updateAccountValidator)
         {
             _authService = authService;
             _createUserValidator = createUserValidator;
@@ -31,6 +32,7 @@ namespace AuthService.Controllers
             _logger = logger;
             _changePasswordValidator = changePasswordValidator;
             _deleteAccountValidator = deleteAccountValidator;
+            _updateAccountValidator = updateAccountValidator;
         }
 
         [EnableRateLimiting("registerPerIp")]
@@ -262,6 +264,46 @@ namespace AuthService.Controllers
             {
                 _logger.LogError(ex, "Error deleting the account of the user {UserId}", userId);
                 return StatusCode(500, new {message = "An error occurred while deleting the account."});
+            }
+        }
+
+        [Authorize]
+        [HttpPatch("account")]
+        public async Task<IActionResult> UpdateAccount([FromBody] UpdateAccountDto dto)
+        {
+            var validation = await _updateAccountValidator.ValidateAsync(dto);
+            if (!validation.IsValid)
+            {
+                return BadRequest(new { message = "Data provider are not valid.", errors = validation.Errors.Select(e => e.ErrorMessage)});
+            }
+
+            var userIdValue = User.FindFirst("sub")?.Value ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (!Guid.TryParse(userIdValue, out var userId))
+            {
+                return Unauthorized(new { message = "Invalid user ID in token."});
+            }
+
+            try
+            {
+                var updatedAccount = await _authService.UpdateAccountAsync(userId, dto);
+                return Ok(new { message = "Account updated successfully.", account = updatedAccount});
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return NotFound(new { message = ex.Message });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Conflict(new { message = ex.Message });
+            }
+            catch (Microsoft.EntityFrameworkCore.DbUpdateException ex) when (ex.InnerException is Npgsql.PostgresException postgresEx && postgresEx.SqlState == Npgsql.PostgresErrorCodes.UniqueViolation)
+            {
+                return Conflict(new { message = "The username or email is already registered."});
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error updating the account of the user {UserId}", userId);
+                return StatusCode(500, new { message = "An error occurred while updating the account."});
             }
         }
     }
