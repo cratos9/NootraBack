@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using FluentValidation;
 using AuthService.Dtos;
 using AuthService.Services;
+using Microsoft.AspNetCore.Http;
 using System.Security.Claims;
 using Npgsql;
 
@@ -19,14 +20,22 @@ namespace AuthService.Controllers
         private readonly IValidator<RefreshTokenRequestDto> _refreshTokenValidator;
         private readonly IValidator<LoginUserDto> _loginValidator;
         private readonly ILogger<UserController> _logger;
+        private readonly IValidator<ChangePasswordDto> _changePasswordValidator;
+        private readonly IValidator<DeleteAccountDto> _deleteAccountValidator;
+        private readonly IValidator<UpdateAccountDto> _updateAccountValidator;
+        private readonly IProfilePictureService _profilePictureService;
 
-        public UserController(IAuthService authService, IValidator<CreateUserDto> createUserValidator, IValidator<RefreshTokenRequestDto> refreshTokenValidator, IValidator<LoginUserDto> loginValidator, ILogger<UserController> logger)
+        public UserController(IAuthService authService, IValidator<CreateUserDto> createUserValidator, IValidator<RefreshTokenRequestDto> refreshTokenValidator, IValidator<LoginUserDto> loginValidator, ILogger<UserController> logger, IValidator<ChangePasswordDto> changePasswordValidator, IValidator<DeleteAccountDto> deleteAccountValidator, IValidator<UpdateAccountDto> updateAccountValidator, IProfilePictureService profilePictureService)
         {
             _authService = authService;
             _createUserValidator = createUserValidator;
             _refreshTokenValidator = refreshTokenValidator;
             _loginValidator = loginValidator;
             _logger = logger;
+            _changePasswordValidator = changePasswordValidator;
+            _deleteAccountValidator = deleteAccountValidator;
+            _updateAccountValidator = updateAccountValidator;
+            _profilePictureService = profilePictureService;
         }
 
         [EnableRateLimiting("registerPerIp")]
@@ -167,6 +176,221 @@ namespace AuthService.Controllers
             {
                 _logger.LogError(ex, "Error logging out a user.");
                 return StatusCode(500, new { message = "An unexpected error occurred."});
+            }
+        }
+
+        [Authorize]
+        [HttpPut("password")]
+        public async Task<IActionResult> ChangePassword([FromBody] ChangePasswordDto dto)
+        {
+            var validation = await _changePasswordValidator.ValidateAsync(dto);
+            if (!validation.IsValid)
+            {
+                return BadRequest(new { message = "The provided data is not valid.", errors = validation.Errors.Select(e => e.ErrorMessage)});
+            }
+
+            var userIdValue = User.FindFirst("sub")?.Value?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (!Guid.TryParse(userIdValue, out var userId))
+            {
+                return Unauthorized(new { message = "Invalid user ID in token."});
+            }
+
+            var authorization = Request.Headers.Authorization.ToString();
+            if (!authorization.StartsWith( "Bearer ", StringComparison.OrdinalIgnoreCase))
+            {
+                return Unauthorized(new { message = "A valid access token is required."});
+            }
+
+            var accessToken = authorization["Bearer ".Length..].Trim();
+
+            try
+            {
+                await _authService.ChangePasswordAsync(userId, dto, accessToken);
+                return Ok(new { message = "Password changed successfully. Please log in again with your new password."});
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                return Unauthorized(new { message = ex.Message });
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return NotFound(new { message = ex.Message });
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error changing the password of the user {UserId}", userId);
+                return StatusCode(500, new { message = "An error occurred while changing the password."});
+            }
+        }
+
+        [Authorize]
+        [HttpDelete("account")]
+        public async Task<IActionResult> DeleteAccount([FromBody] DeleteAccountDto dto)
+        {
+            var validation = await _deleteAccountValidator.ValidateAsync(dto);
+            if (!validation.IsValid)
+            {
+                return BadRequest(new {message = "Data provided is not valid.", errors = validation.Errors.Select(e => e.ErrorMessage)});
+            }
+
+            var userIdValue = User.FindFirst("sub")?.Value?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (!Guid.TryParse(userIdValue, out var userId))
+            {
+                return Unauthorized(new {message = "Invalid user ID in token."});
+            }
+
+            var authorization = Request.Headers.Authorization.ToString();
+            if (!authorization.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
+            {
+                return Unauthorized(new {message = "A valid access token is required."});
+            }
+
+            var accessToken = authorization["Bearer ".Length..].Trim();
+            try
+            {
+                await _authService.DeleteAccountAsync(userId, dto, accessToken);
+                return Ok(new { message = "Account deleted successfully."});
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                return Unauthorized(new { message = ex.Message });
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return NotFound(new { message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error deleting the account of the user {UserId}", userId);
+                return StatusCode(500, new {message = "An error occurred while deleting the account."});
+            }
+        }
+
+        [Authorize]
+        [HttpPatch("account")]
+        public async Task<IActionResult> UpdateAccount([FromBody] UpdateAccountDto dto)
+        {
+            var validation = await _updateAccountValidator.ValidateAsync(dto);
+            if (!validation.IsValid)
+            {
+                return BadRequest(new { message = "Data provider are not valid.", errors = validation.Errors.Select(e => e.ErrorMessage)});
+            }
+
+            var userIdValue = User.FindFirst("sub")?.Value ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (!Guid.TryParse(userIdValue, out var userId))
+            {
+                return Unauthorized(new { message = "Invalid user ID in token."});
+            }
+
+            try
+            {
+                var updatedAccount = await _authService.UpdateAccountAsync(userId, dto);
+                return Ok(new { message = "Account updated successfully.", account = updatedAccount});
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return NotFound(new { message = ex.Message });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Conflict(new { message = ex.Message });
+            }
+            catch (Microsoft.EntityFrameworkCore.DbUpdateException ex) when (ex.InnerException is Npgsql.PostgresException postgresEx && postgresEx.SqlState == Npgsql.PostgresErrorCodes.UniqueViolation)
+            {
+                return Conflict(new { message = "The username or email is already registered."});
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error updating the account of the user {UserId}", userId);
+                return StatusCode(500, new { message = "An error occurred while updating the account."});
+            }
+        }
+
+        [Authorize]
+        [HttpPost("account/profile-picture")]
+        [Consumes("multipart/form-data")]
+        [RequestSizeLimit(6 * 1024 * 1024)]
+        public async Task<IActionResult> UploadProfilePicture(IFormFile file)
+        {
+            var userIdValue = User.FindFirst("sub")?.Value ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (!Guid.TryParse(userIdValue, out var userId))
+            {
+                return Unauthorized(new { message = "User ID is invalid."});
+            }
+
+            try
+            {
+                var pictureUrl = await _profilePictureService.UploadAsync(userId, file);
+                return Ok(new {message = "Profile picture updated successfully.", profilePictureUrl = pictureUrl});
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return NotFound(new { message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "An error occurred while uploading the profile picture for user {UserId}", userId);
+                return StatusCode(500, new { message = "An error occurred while saving the profile picture."});
+            }
+        }
+
+        [Authorize]
+        [HttpGet("account/profile-picture")]
+        public async Task<IActionResult> GetProfilePicture()
+        {
+            var userIdValue = User.FindFirst("sub")?.Value ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (!Guid.TryParse(userIdValue, out var userId))
+            {
+                return Unauthorized(new { message = "User ID is invalid."});
+            }
+
+            try
+            {
+                var pictureUrl = await _profilePictureService.GetCurrentPictureUrlAsync(userId);
+                return Ok(new { profilePictureUrl = pictureUrl});
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return NotFound(new { message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "An error occurred while consulting the profile picture for user {UserId}", userId);
+                return StatusCode(500, new { message = "An error occurred while consulting the profile picture."});
+            }
+        }
+
+        [Authorize]
+        [HttpDelete("account/profile-picture")]
+        public async Task<IActionResult> DeleteProfilePicture()
+        {
+            var userIdValue = User.FindFirst("sub")?.Value ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (!Guid.TryParse(userIdValue, out var userId))
+            {
+                return Unauthorized(new { message = "User ID is invalid."});
+            }
+
+            try
+            {
+                await _profilePictureService.DeleteAsync(userId);
+                return Ok(new {message = "Profile picture deleted successfully. The default image will be used.", profilePictureUrl = "/images/default.png"});
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return NotFound(new { message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "An error occurred while deleting the profile picture for user {UserId}", userId);
+                return StatusCode(500, new { message = "An error occurred while deleting the profile picture."});
             }
         }
     }

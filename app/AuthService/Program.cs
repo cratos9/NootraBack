@@ -34,6 +34,7 @@ builder.Services.AddValidatorsFromAssemblyContaining<Program>();
 builder.Services.AddScoped<IAuthService, AuthService.Services.AuthService>();
 builder.Services.AddScoped<IJwtService, JwtService>();
 builder.Services.AddScoped<IRedisService, RedisService>();
+builder.Services.AddScoped<IProfilePictureService, ProfilePictureService>();
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJwtBearer(options =>
     {
@@ -170,6 +171,7 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseCors("ReactPolicy");
+app.UseStaticFiles();
 // app.UseHttpsRedirection();
 app.UseRateLimiter();
 app.UseAuthentication();

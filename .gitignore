@@ -54,6 +54,7 @@ dist/
 *.egg-info/
 .eggs/
 pip-wheel-metadata/
+/app/AuthService/wwwroot/uploads/profile-pictures/*.png
 
 .pytest_cache/
 .coverage
