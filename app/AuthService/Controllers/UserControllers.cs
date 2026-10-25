@@ -24,8 +24,11 @@ namespace AuthService.Controllers
         private readonly IValidator<DeleteAccountDto> _deleteAccountValidator;
         private readonly IValidator<UpdateAccountDto> _updateAccountValidator;
         private readonly IProfilePictureService _profilePictureService;
+        private readonly IValidator<PasswordResetRequestDto> _passwordResetRequestValidator;
+        private readonly IValidator<PasswordResetDto> _passwordResetValidator;
+        private readonly IPasswordResetService _passwordResetService;
 
-        public UserController(IAuthService authService, IValidator<CreateUserDto> createUserValidator, IValidator<RefreshTokenRequestDto> refreshTokenValidator, IValidator<LoginUserDto> loginValidator, ILogger<UserController> logger, IValidator<ChangePasswordDto> changePasswordValidator, IValidator<DeleteAccountDto> deleteAccountValidator, IValidator<UpdateAccountDto> updateAccountValidator, IProfilePictureService profilePictureService)
+        public UserController(IAuthService authService, IValidator<CreateUserDto> createUserValidator, IValidator<RefreshTokenRequestDto> refreshTokenValidator, IValidator<LoginUserDto> loginValidator, ILogger<UserController> logger, IValidator<ChangePasswordDto> changePasswordValidator, IValidator<DeleteAccountDto> deleteAccountValidator, IValidator<UpdateAccountDto> updateAccountValidator, IProfilePictureService profilePictureService, IValidator<PasswordResetRequestDto> passwordResetRequestValidator, IValidator<PasswordResetDto> passwordResetValidator, IPasswordResetService passwordResetService)
         {
             _authService = authService;
             _createUserValidator = createUserValidator;
@@ -36,6 +39,9 @@ namespace AuthService.Controllers
             _deleteAccountValidator = deleteAccountValidator;
             _updateAccountValidator = updateAccountValidator;
             _profilePictureService = profilePictureService;
+            _passwordResetRequestValidator = passwordResetRequestValidator;
+            _passwordResetValidator = passwordResetValidator;
+            _passwordResetService = passwordResetService;
         }
 
         [EnableRateLimiting("registerPerIp")]
@@ -391,6 +397,37 @@ namespace AuthService.Controllers
             {
                 _logger.LogError(ex, "An error occurred while deleting the profile picture for user {UserId}", userId);
                 return StatusCode(500, new { message = "An error occurred while deleting the profile picture."});
+            }
+        }
+
+        [AllowAnonymous]
+        [HttpPost("forgot-password")]
+        public async Task<IActionResult> ForgotPassword([FromBody] PasswordResetRequestDto dto)
+        {
+            var validation = await _passwordResetRequestValidator.ValidateAsync(dto);
+            if (!validation.IsValid)
+                return BadRequest(new {errors = validation.Errors.Select(e => new {field = e.PropertyName, message = e.ErrorMessage})});
+
+            await _passwordResetService.RequestResetAsync(dto);
+            return Ok(new {message = "If an account is associated with that email, you will receive instructions to reset your password."});
+        }
+
+        [AllowAnonymous]
+        [HttpPost("reset-password")]
+        public async Task<IActionResult> ResetPassword([FromBody] PasswordResetDto dto)
+        {
+            var validation = await _passwordResetValidator.ValidateAsync(dto);
+            if (!validation.IsValid)
+                return BadRequest(new {errors = validation.Errors.Select(e => new {field = e.PropertyName, message = e.ErrorMessage})});
+
+            try
+            {
+                await _passwordResetService.ResetPasswordAsync(dto);
+                return Ok(new {message = "The password has been updated successfully."});
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { message = ex.Message });
             }
         }
     }
