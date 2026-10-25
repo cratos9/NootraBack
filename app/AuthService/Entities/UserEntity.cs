@@ -23,5 +23,7 @@ namespace AuthService.Entities
         public DateTime? LastLogin { get; set; }
         public string? RefreshToken { get; set; }
         public DateTime? RefreshTokenExpiryAt { get; set; }
+        public string? PasswordResetTokenHash { get; set; }
+        public DateTime? PasswordResetTokenExpiryAt { get; set; }
     }
 }
