@@ -7,6 +7,7 @@ import uuid
 
 if TYPE_CHECKING:
     from .note import Note
+    from .attachment import Attachment
 
 class Book(Base):
     __tablename__ = "books"
@@ -50,5 +51,5 @@ class Book(Base):
     # Relationships with other tables (if any)
     children: Mapped[list["Book"]] = relationship("Book", back_populates="parent", cascade="all, delete-orphan")
     parent: Mapped["Book | None"] = relationship("Book", back_populates="children", remote_side=[id])
-    # attachments: Mapped[list["Attachment"]] = mapped_column(nullable=True, foreign_key="attachments.book_id", ondelete="CASCADE", index=True, lazy="dynamic")
     notes: Mapped[list["Note"]] = relationship("Note", back_populates="book", cascade="all, delete-orphan")
+    attachments: Mapped[list["Attachment"]] = relationship("Attachment", back_populates="book", cascade="all, delete-orphan")
