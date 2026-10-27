@@ -9,6 +9,7 @@ from fastapi.responses import JSONResponse
 from fastapi import HTTPException
 from api.routes.books import router as books_router
 from api.routes.note import router as notes_router
+from api.routes.attachment import router as attachment_router
 from slowapi.errors import RateLimitExceeded
 from core.rate_limit import limiter
 from core.logging import configure_logging
@@ -131,6 +132,7 @@ async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONR
 
 app.include_router(books_router)
 app.include_router(notes_router)
+app.include_router(attachment_router)
 
 @app.middleware("http")
 async def log_request(request: Request, call_next):

@@ -8,6 +8,7 @@ from core.config import settings
 from database.base import Base
 from models.book import Book
 from models.note import Note
+from models.attachment import Attachment
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
 config = context.config
