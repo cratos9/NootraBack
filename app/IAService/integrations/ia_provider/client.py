@@ -49,7 +49,7 @@ class IA:
     def escape_output(text: str) -> str:
         return html.escape(text, quote=True)
 
-    async def ask(self, prompt: str, memory_messages: list[dict[str, Any]] | None = None,) -> dict[str, Any]:
+    async def ask(self, prompt: str, memory_messages: list[dict[str, Any]] | None = None) -> dict[str, Any]:
         prompt = self._sanitize_input(prompt)
         system_prompt = self.SYSTEM_PROMPT
         if self._classify_intent(prompt) == "dangerous":
