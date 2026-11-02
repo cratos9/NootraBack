@@ -124,6 +124,8 @@ class IA:
 
         return {
             "text": self._validate_output(output),
+            "query_tokens": response_data.get("usage", {}).get("prompt_tokens"),
+            "response_tokens": response_data.get("usage", {}).get("completion_tokens"),
             "tokens_used": tokens_used,
             "response_time": final_time - init_time,
         }
