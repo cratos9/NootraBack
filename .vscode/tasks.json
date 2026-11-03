@@ -1,0 +1,112 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "🐍 BookService",
+            "type": "shell",
+            "command": "source .venv/bin/activate && uvicorn main:app --reload --port 8000",
+            "options": {
+                "cwd": "${workspaceFolder}/app/BookService"
+            },
+            "isBackground": true,
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "panel": "dedicated",
+                "group": "nootra"
+            },
+            "runOptions": {
+                "runOn": "folderOpen"
+            }
+        },
+        {
+            "label": "🤖 AIService",
+            "type": "shell",
+            "command": "source .venv/bin/activate && uvicorn main:app --reload --port 8001",
+            "options": {
+                "cwd": "${workspaceFolder}/app/IAService"
+            },
+            "isBackground": true,
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "panel": "dedicated",
+                "group": "nootra"
+            },
+            "runOptions": {
+                "runOn": "folderOpen"
+            }
+        },
+        {
+            "label": "🟣 AuthService (.NET)",
+            "type": "shell",
+            "command": "dotnet watch run",
+            "options": {
+                "cwd": "${workspaceFolder}/app/AuthService"
+            },
+            "isBackground": true,
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "panel": "dedicated",
+                "group": "nootra"
+            },
+            "runOptions": {
+                "runOn": "folderOpen"
+            }
+        },
+        {
+            "label": "🔴 Redis",
+            "type": "shell",
+            "command": "redis-cli",
+            "isBackground": true,
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "panel": "dedicated",
+                "group": "nootra"
+            },
+            "runOptions": {
+                "runOn": "folderOpen"
+            }
+        },
+        {
+            "label": "🐘 PostgreSQL",
+            "type": "shell",
+            "command": "sudo -u postgres psql",
+            "isBackground": true,
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "panel": "dedicated",
+                "group": "nootra"
+            },
+            "runOptions": {
+                "runOn": "folderOpen"
+            }
+        },
+        {
+            "label": "📂 Git",
+            "type": "shell",
+            "command": "bash",
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "panel": "dedicated",
+                "group": "nootra"
+            },
+            "runOptions": {
+                "runOn": "folderOpen"
+            }
+        }
+    ]
+}
