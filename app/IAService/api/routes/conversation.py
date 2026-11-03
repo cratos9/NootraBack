@@ -2,7 +2,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Request, Query, status
 from sqlalchemy.orm import Session
 from database.session import get_db
-from dependencies.auth import get_current_user
+from api.dependencies.auth import get_current_user
 from core.rate_limit import limiter
 from schemas.conversation import ConversationCreate, ConversationUpdate, ConversationResponse, ConversationListResponse
 from services import conversation as conversation_service

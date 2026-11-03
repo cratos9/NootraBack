@@ -5,8 +5,10 @@ from models.message import Message
 from repositories import message as message_repo
 from repositories import conversation as conversation_repo
 from schemas.message import MessageUpdate, MessageResponse, MessageListResponse
-from integrations.ia_provider.client import IA as ai
+from integrations.ia_provider.client import IA
 import logging
+
+ia = IA()
 
 logger = logging.getLogger(__name__)
 
@@ -100,17 +102,17 @@ async def ask_ai(db: Session, conversation_id: UUID, user_id: UUID, query_text: 
             })
 
         start_time = time.perf_counter()
-        ai_response = await ai.ask(query_text=query_text, history=history)
+        ai_response = await ia.ask(prompt=query_text, memory_messages=history)
         response_time_ms = int((time.perf_counter() - start_time) * 1000)
 
-        query_tokens = ai_response["query_tokens"]
-        response_tokens = ai_response["response_tokens"]
+        query_tokens = ai_response.get("query_tokens") or 0
+        response_tokens = ai_response.get("response_tokens") or 0
 
         message_data = {
             "conversation_id": conversation_id,
             "order": conversation.message_count + 1,
             "query_text": query_text,
-            "response_text": ai_response["text"],
+            "response_text": ai_response.get("text") or "",
             "query_type": "general",
             "query_tokens": query_tokens,
             "response_time_ms": response_time_ms,
