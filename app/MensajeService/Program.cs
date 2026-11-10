@@ -17,6 +17,8 @@ builder.Services.AddDbContext<MessageDbContext>(options =>
     )
 );
 
+builder.Services.AddScoped<ContactPreferencesRepository>();
+builder.Services.AddScoped<ContactPreferencesService>();
 builder.Services.AddScoped<ContactRepository>();
 builder.Services.AddScoped<ContactServices>();
 
