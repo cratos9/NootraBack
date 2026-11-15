@@ -17,6 +17,9 @@ builder.Services.AddDbContext<MessageDbContext>(options =>
     )
 );
 
+builder.Services.AddScoped<ConversationRepository>();
+builder.Services.AddScoped<ConversationParticipantRepository>();
+builder.Services.AddScoped<ConversationService>();
 builder.Services.AddScoped<ContactReportRepository>();
 builder.Services.AddScoped<ContactReportService>();
 builder.Services.AddScoped<UserBlockRepository>();
