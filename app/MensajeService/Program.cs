@@ -1,4 +1,5 @@
 using MensajeService.Data;
+using MensajeService.Hubs;
 using MensajeService.Repositories;
 using MensajeService.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -17,6 +18,9 @@ builder.Services.AddDbContext<MessageDbContext>(options =>
     )
 );
 
+builder.Services.AddScoped<MessageRepository>();
+builder.Services.AddScoped<MessageReceiptRepository>();
+builder.Services.AddScoped<MessageService>();
 builder.Services.AddScoped<ConversationRepository>();
 builder.Services.AddScoped<ConversationParticipantRepository>();
 builder.Services.AddScoped<ConversationService>();
@@ -125,8 +129,10 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
+app.UseWebSockets();
 // app.UseHttpsRedirection();
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
+app.MapHub<MessageHub>("/hubs/messages");
 app.Run();
