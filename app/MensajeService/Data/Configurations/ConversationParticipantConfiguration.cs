@@ -1,4 +1,5 @@
 using MensajeService.Models;
+using MensajeService.Models.Enums;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -24,6 +25,13 @@ public class ConversationParticipantConfiguration : IEntityTypeConfiguration<Con
             .HasColumnName("user_id")
             .IsRequired();
 
+        builder.Property(p => p.Role)
+            .HasColumnName("role")
+            .HasConversion<string>()
+            .HasMaxLength(20)
+            .HasDefaultValue(ConversationParticipantRole.Member)
+            .IsRequired();
+
         builder.Property(p => p.JoinedAt)
             .HasColumnName("joined_at")
             .HasColumnType("timestamp with time zone")
@@ -45,6 +53,11 @@ public class ConversationParticipantConfiguration : IEntityTypeConfiguration<Con
             table.HasCheckConstraint(
                 "ck_conversation_participants_valid_dates",
                 "left_at IS NULL OR left_at >= joined_at"
+            );
+
+            table.HasCheckConstraint(
+                "ck_conversation_participants_valid_role",
+                "role IN ('Member', 'Admin')"
             );
         });
     }

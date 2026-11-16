@@ -182,10 +182,24 @@ namespace MensajeService.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
 
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("description");
+
                     b.Property<string>("DirectKey")
                         .HasMaxLength(73)
                         .HasColumnType("character varying(73)")
                         .HasColumnName("direct_key");
+
+                    b.Property<string>("Name")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("name");
 
                     b.Property<string>("Type")
                         .IsRequired()
@@ -207,6 +221,8 @@ namespace MensajeService.Migrations
                     b.ToTable("conversations", null, t =>
                         {
                             t.HasCheckConstraint("ck_conversations_direct_key", "(type = 'Direct' AND direct_key IS NOT NULL) OR (type = 'Group' AND direct_key IS NULL)");
+
+                            t.HasCheckConstraint("ck_conversations_group_metadata", "(type = 'Direct' AND name IS NULL AND description IS NULL AND created_by IS NULL) OR (type = 'Group' AND name IS NOT NULL AND length(trim(name)) > 0 AND created_by IS NOT NULL)");
 
                             t.HasCheckConstraint("ck_conversations_valid_type", "type IN ('Direct', 'Group')");
                         });
@@ -230,6 +246,14 @@ namespace MensajeService.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("left_at");
 
+                    b.Property<string>("Role")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasDefaultValue("Member")
+                        .HasColumnName("role");
+
                     b.Property<Guid>("UserId")
                         .HasColumnType("uuid")
                         .HasColumnName("user_id");
@@ -246,6 +270,8 @@ namespace MensajeService.Migrations
                     b.ToTable("conversation_participants", null, t =>
                         {
                             t.HasCheckConstraint("ck_conversation_participants_valid_dates", "left_at IS NULL OR left_at >= joined_at");
+
+                            t.HasCheckConstraint("ck_conversation_participants_valid_role", "role IN ('Member', 'Admin')");
                         });
                 });
 

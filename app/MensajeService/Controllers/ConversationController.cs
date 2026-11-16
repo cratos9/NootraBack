@@ -26,15 +26,30 @@ public class ConversationController : ControllerBase
         try
         {
             var result = await _conversationService.CreateDirectAsync(userId, request.OtherUserId);
+
             return Ok(result);
         }
-        catch (ArgumentException ex)
+        catch (Exception ex)
         {
-            return BadRequest(new { message = ex.Message });
+            return HandleException(ex);
         }
-        catch (InvalidOperationException ex)
+    }
+
+    [HttpPost("groups")]
+    public async Task<IActionResult> CreateGroup([FromBody] CreateGroupRequestDto request)
+    {
+        if (!TryGetUserId(out var userId))
+            return Unauthorized();
+
+        try
         {
-            return Conflict(new { message = ex.Message });
+            var result = await _conversationService.CreateGroupAsync(userId, request);
+
+            return CreatedAtAction(nameof(GetById), new { id = result.Id }, result);
+        }
+        catch (Exception ex)
+        {
+            return HandleException(ex);
         }
     }
 
@@ -44,9 +59,16 @@ public class ConversationController : ControllerBase
         if (!TryGetUserId(out var userId))
             return Unauthorized();
 
-        var result = await _conversationService.GetMyConversationsAsync(userId);
+        try
+        {
+            var result = await _conversationService.GetMyConversationsAsync(userId);
 
-        return Ok(result);
+            return Ok(result);
+        }
+        catch (Exception ex)
+        {
+            return HandleException(ex);
+        }
     }
 
     [HttpGet("{id:guid}")]
@@ -61,13 +83,9 @@ public class ConversationController : ControllerBase
 
             return Ok(result);
         }
-        catch (KeyNotFoundException)
+        catch (Exception ex)
         {
-            return NotFound(new { message = "Conversation not found." });
-        }
-        catch (ArgumentException ex)
-        {
-            return BadRequest(new { message = ex.Message });
+            return HandleException(ex);
         }
     }
 
@@ -83,13 +101,99 @@ public class ConversationController : ControllerBase
 
             return Ok(result);
         }
-        catch (KeyNotFoundException)
+        catch (Exception ex)
         {
-            return NotFound(new { message = "Conversation not found." });
+            return HandleException(ex);
         }
-        catch (ArgumentException ex)
+    }
+
+    [HttpPut("{id:guid}/group")]
+    public async Task<IActionResult> UpdateGroup(Guid id, [FromBody] UpdateGroupRequestDto request)
+    {
+        if (!TryGetUserId(out var userId))
+            return Unauthorized();
+
+        try
         {
-            return BadRequest(new { message = ex.Message });
+            var result = await _conversationService.UpdateGroupAsync(userId, id, request);
+
+            return Ok(result);
+        }
+        catch (Exception ex)
+        {
+            return HandleException(ex);
+        }
+    }
+
+    [HttpPost("{id:guid}/participants")]
+    public async Task<IActionResult> AddParticipants(Guid id, [FromBody] AddGroupParticipantsRequestDto request)
+    {
+        if (!TryGetUserId(out var userId))
+            return Unauthorized();
+
+        try
+        {
+            var result = await _conversationService.AddParticipantsAsync(userId, id, request);
+
+            return Ok(result);
+        }
+        catch (Exception ex)
+        {
+            return HandleException(ex);
+        }
+    }
+
+    [HttpDelete("{id:guid}/participants/{userId:guid}")]
+    public async Task<IActionResult> RemoveParticipant(Guid id, Guid userId)
+    {
+        if (!TryGetUserId(out var currentUserId))
+            return Unauthorized();
+
+        try
+        {
+            await _conversationService.RemoveParticipantAsync(currentUserId, id, userId);
+
+            return NoContent();
+        }
+        catch (Exception ex)
+        {
+            return HandleException(ex);
+        }
+    }
+
+    [HttpPut("{id:guid}/participants/{userId:guid}/role")]
+    public async Task<IActionResult> UpdateParticipantRole(Guid id, Guid userId, [FromBody] UpdateParticipantRoleRequestDto request)
+    {
+        if (!TryGetUserId(out var currentUserId))
+            return Unauthorized();
+
+        try
+        {
+            await _conversationService.UpdateParticipantRoleAsync(currentUserId, id, userId, request);
+
+            return NoContent();
+        }
+        catch (Exception ex)
+        {
+            return HandleException(ex);
+        }
+    }
+
+    [HttpPost("{id:guid}/leave")]
+    public async Task<IActionResult> LeaveGroup(Guid id)
+    {
+        if (!TryGetUserId(out var userId))
+            return Unauthorized();
+
+        try
+        {
+            await _conversationService.LeaveGroupAsync(userId, id);
+
+            return NoContent();
+        }
+        catch (Exception ex)
+        {
+            return HandleException(ex);
         }
     }
 
@@ -105,13 +209,9 @@ public class ConversationController : ControllerBase
 
             return NoContent();
         }
-        catch (KeyNotFoundException)
+        catch (Exception ex)
         {
-            return NotFound(new { message = "Conversation not found." });
-        }
-        catch (ArgumentException ex)
-        {
-            return BadRequest(new { message = ex.Message });
+            return HandleException(ex);
         }
     }
 
@@ -121,4 +221,25 @@ public class ConversationController : ControllerBase
 
         return Guid.TryParse(claim, out userId);
     }
-}
+
+    private IActionResult HandleException(Exception exception)
+    {
+        return exception switch
+        {
+            KeyNotFoundException =>
+                NotFound(new { message = exception.Message }),
+
+            UnauthorizedAccessException =>
+                Forbid(),
+
+            InvalidOperationException =>
+                Conflict(new { message = exception.Message }),
+
+            ArgumentException => 
+                BadRequest(new { message = exception.Message }),
+
+            _ =>
+                StatusCode(500, new { message = "An internal server error occurred."})
+        };
+    }
+}   

@@ -27,6 +27,17 @@ public class ConversationConfiguration : IEntityTypeConfiguration<Conversation>
             .HasColumnName("direct_key")
             .HasMaxLength(73);
 
+        builder.Property(c => c.Name)
+            .HasColumnName("name")
+            .HasMaxLength(100);
+
+        builder.Property(c => c.Description)
+            .HasColumnName("description")
+            .HasMaxLength(500);
+
+        builder.Property(c => c.CreatedBy)
+            .HasColumnName("created_by");
+
         builder.Property(c => c.CreatedAt)
             .HasColumnName("created_at")
             .HasColumnType("timestamp with time zone")
@@ -53,6 +64,12 @@ public class ConversationConfiguration : IEntityTypeConfiguration<Conversation>
                 "ck_conversations_direct_key",
                 "(type = 'Direct' AND direct_key IS NOT NULL) OR " +
                 "(type = 'Group' AND direct_key IS NULL)"
+            );
+
+            table.HasCheckConstraint(
+                "ck_conversations_group_metadata",
+                "(type = 'Direct' AND name IS NULL AND description IS NULL AND created_by IS NULL) OR " +
+                "(type = 'Group' AND name IS NOT NULL AND length(trim(name)) > 0 AND created_by IS NOT NULL)"
             );
         });
 
