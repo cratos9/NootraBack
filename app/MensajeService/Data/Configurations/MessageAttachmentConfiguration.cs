@@ -1,6 +1,7 @@
 using MensajeService.Models;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
+using MensajeService.Data.Converters;
 
 namespace MensajeService.Data.Configurations;
 
@@ -23,6 +24,7 @@ public class MessageAttachmentConfiguration : IEntityTypeConfiguration<MessageAt
         builder.Property(a => a.OriginalFilename)
             .HasColumnName("original_filename")
             .HasMaxLength(255)
+            .HasConversion<EncryptedAttachmentFilenameConverter>()
             .IsRequired();
 
         builder.Property(a => a.StoredFilename)

@@ -6,9 +6,12 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
+using MensajeService.Security;
 using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
+
+EncryptionKeyProvider.Initialize(builder.Configuration["Encryption:Key"]);
 
 builder.Services.AddControllers();
 

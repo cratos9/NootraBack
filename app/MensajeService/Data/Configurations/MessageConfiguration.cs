@@ -1,5 +1,6 @@
 using MensajeService.Models;
 using Microsoft.EntityFrameworkCore;
+using MensajeService.Data.Converters;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
 namespace MensajeService.Data.Configurations;
@@ -26,7 +27,8 @@ public class MessageConfiguration : IEntityTypeConfiguration<Message>
 
         builder.Property(m => m.Content)
             .HasColumnName("content")
-            .HasColumnType("text");
+            .HasColumnType("text")
+            .HasConversion<EncryptedMessageContentConverter>();
 
         builder.Property(m => m.Type)
             .HasColumnName("type")
