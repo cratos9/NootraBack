@@ -1,32 +1,62 @@
-using Microsoft.AspNetCore.Authentication.JwtBearer;
-using Microsoft.IdentityModel.Tokens;
-using System.Text;
-using Microsoft.EntityFrameworkCore;
 using MensajeService.Data;
+using MensajeService.Hubs;
+using MensajeService.Repositories;
+using MensajeService.Services;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.IdentityModel.Tokens;
+using Microsoft.OpenApi.Models;
+using MensajeService.Security;
+using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
+
+EncryptionKeyProvider.Initialize(builder.Configuration["Encryption:Key"]);
+
+builder.Services.AddControllers();
 
 builder.Services.AddDbContext<MessageDbContext>(options =>
     options.UseNpgsql(
         builder.Configuration.GetConnectionString("DefaultConnection")
     )
-); 
+);
 
-builder.Services.AddControllers();
-builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
+builder.Services.AddScoped<FileStorageService>();
+builder.Services.AddScoped<MessageRepository>();
+builder.Services.AddScoped<MessageReceiptRepository>();
+builder.Services.AddScoped<MessageService>();
+builder.Services.AddScoped<ConversationRepository>();
+builder.Services.AddScoped<ConversationParticipantRepository>();
+builder.Services.AddScoped<ConversationService>();
+builder.Services.AddScoped<ContactReportRepository>();
+builder.Services.AddScoped<ContactReportService>();
+builder.Services.AddScoped<UserBlockRepository>();
+builder.Services.AddScoped<UserBlockService>();
+builder.Services.AddScoped<ContactPreferencesRepository>();
+builder.Services.AddScoped<ContactPreferencesService>();
+builder.Services.AddScoped<ContactRepository>();
+builder.Services.AddScoped<ContactServices>();
 
-var jwtKey = builder.Configuration["Jwt:SecretKey"]
-    ?? throw new InvalidOperationException("JWT SecretKey no configurada");
+var jwtKey = builder.Configuration["Jwt:SecretKey"];
+var jwtIssuer = builder.Configuration["Jwt:Issuer"];
+var jwtAudience = builder.Configuration["Jwt:Audience"];
 
-var jwtIssuer = builder.Configuration["Jwt:Issuer"]
-    ?? throw new InvalidOperationException("JWT Issuer no configurado");
+if (string.IsNullOrWhiteSpace(jwtKey))
+{
+    throw new InvalidOperationException("JWT SecretKey no configurada");
+}
 
-var jwtAudience = builder.Configuration["Jwt:Audience"]
-    ?? throw new InvalidOperationException("JWT Audience no configurado");
+if (string.IsNullOrWhiteSpace(jwtIssuer))
+{
+    throw new InvalidOperationException("JWT Issuer no configurado");
+}
 
-builder.Services
-    .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+if (string.IsNullOrWhiteSpace(jwtAudience))
+{
+    throw new InvalidOperationException("JWT Audience no configurado");
+}
+
+builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
         options.MapInboundClaims = false;
@@ -34,41 +64,79 @@ builder.Services
         options.TokenValidationParameters = new TokenValidationParameters
         {
             ValidateIssuer = true,
-            ValidIssuer = jwtIssuer,
-
             ValidateAudience = true,
+            ValidateLifetime = true,
+            ValidateIssuerSigningKey = true,
+
+            ValidIssuer = jwtIssuer,
             ValidAudience = jwtAudience,
 
-            ValidateLifetime = true,
-
-            ValidateIssuerSigningKey = true,
-            IssuerSigningKey = new SymmetricSecurityKey(
-                Encoding.UTF8.GetBytes(jwtKey)
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey)
             ),
 
-            ValidAlgorithms = new[]
-            {
-                SecurityAlgorithms.HmacSha256
-            },
+            ClockSkew = TimeSpan.Zero
+        };
 
-            ClockSkew = TimeSpan.Zero,
-            NameClaimType = "unique_name"
+        options.Events = new JwtBearerEvents
+        {
+            OnMessageReceived = context =>
+            {
+                var accessToken = context.Request.Query["access_token"];
+                var path = context.HttpContext.Request.Path;
+                if (!string.IsNullOrEmpty(accessToken) && path.StartsWithSegments("/hubs/messages"))
+                {
+                    context.Token = accessToken;
+                }
+
+                return Task.CompletedTask;
+            }
         };
     });
 
 builder.Services.AddAuthorization();
+
 builder.Services.AddSignalR();
 
-var app = builder.Build();
+builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddSwaggerGen(options =>
+{
+    options.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
+    {
+        Name = "Authorization",
+        Type = SecuritySchemeType.Http,
+        Scheme = "bearer",
+        BearerFormat = "JWT",
+        In = ParameterLocation.Header,
+        Description = "Ingresa tu access token JWT."
+    });
 
+    options.AddSecurityRequirement(new OpenApiSecurityRequirement
+    {
+        {
+            new OpenApiSecurityScheme
+            {
+                Reference = new OpenApiReference
+                {
+                    Type = ReferenceType.SecurityScheme,
+                    Id = "Bearer"
+                }
+            },
+            Array.Empty<string>()
+        }
+    });
+});
+
+var app = builder.Build();
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
     app.UseSwaggerUI();
 }
 
-app.UseHttpsRedirection();
+app.UseWebSockets();
+// app.UseHttpsRedirection();
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
+app.MapHub<MessageHub>("/hubs/messages");
 app.Run();
