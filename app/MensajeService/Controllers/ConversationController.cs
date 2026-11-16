@@ -1,7 +1,9 @@
 using MensajeService.DTOs.Conversations;
+using MensajeService.Hubs;
 using MensajeService.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.SignalR;
 
 namespace MensajeService.Controllers;
 
@@ -11,10 +13,17 @@ namespace MensajeService.Controllers;
 public class ConversationController : ControllerBase
 {
     private readonly ConversationService _conversationService;
+    private readonly IHubContext<MessageHub> _hubContext;
+    private readonly ILogger<ConversationController> _logger;
 
-    public ConversationController(ConversationService conversationService)
+    public ConversationController(
+        ConversationService conversationService,
+        IHubContext<MessageHub> hubContext,
+        ILogger<ConversationController> logger)
     {
         _conversationService = conversationService;
+        _hubContext = hubContext;
+        _logger = logger;
     }
 
     [HttpPost("direct")]
@@ -44,6 +53,8 @@ public class ConversationController : ControllerBase
         try
         {
             var result = await _conversationService.CreateGroupAsync(userId, request);
+
+            await NotifyParticipantsAsync(result.Participants.Select(p => p.UserId), "GroupCreated", result);
 
             return CreatedAtAction(nameof(GetById), new { id = result.Id }, result);
         }
@@ -117,6 +128,8 @@ public class ConversationController : ControllerBase
         {
             var result = await _conversationService.UpdateGroupAsync(userId, id, request);
 
+            await NotifyParticipantsAsync(result.Participants.Select(p => p.UserId), "GroupUpdated", result);
+
             return Ok(result);
         }
         catch (Exception ex)
@@ -135,6 +148,8 @@ public class ConversationController : ControllerBase
         {
             var result = await _conversationService.AddParticipantsAsync(userId, id, request);
 
+            await NotifyParticipantsAsync(result.Participants.Select(p => p.UserId), "ParticipantAdded", new { ConversationId = id, Participants = request.ParticipantIds });
+
             return Ok(result);
         }
         catch (Exception ex)
@@ -151,7 +166,10 @@ public class ConversationController : ControllerBase
 
         try
         {
+            var participants = await _conversationService.GetParticipantsAsync(currentUserId, id);
+
             await _conversationService.RemoveParticipantAsync(currentUserId, id, userId);
+            await NotifyParticipantsAsync(participants.Select(p => p.UserId), "ParticipantRemoved", new { ConversationId = id, UserId = userId, RemovedBy = currentUserId});
 
             return NoContent();
         }
@@ -171,6 +189,10 @@ public class ConversationController : ControllerBase
         {
             await _conversationService.UpdateParticipantRoleAsync(currentUserId, id, userId, request);
 
+            var participants = await _conversationService.GetParticipantsAsync(currentUserId, id);
+
+            await NotifyParticipantsAsync(participants.Select(p => p.UserId), "ParticipantRoleUpdated", new { ConversationId = id, UserId = userId, Role = request.Role, UpdatedBy = currentUserId});
+
             return NoContent();
         }
         catch (Exception ex)
@@ -187,7 +209,10 @@ public class ConversationController : ControllerBase
 
         try
         {
+            var participants = await _conversationService.GetParticipantsAsync(userId, id);
+
             await _conversationService.LeaveGroupAsync(userId, id);
+            await NotifyParticipantsAsync( participants.Select(p => p.UserId), "ParticipantLeft", new{ ConversationId = id, UserId = userId});
 
             return NoContent();
         }
@@ -205,13 +230,31 @@ public class ConversationController : ControllerBase
 
         try
         {
+            var participants = await _conversationService.GetParticipantsAsync(userId, id);
+
             await _conversationService.DeleteForUserAsync(userId, id);
+            await NotifyParticipantsAsync(participants.Select(p => p.UserId), "ParticipantLeft", new { ConversationId = id, UserId = userId});
 
             return NoContent();
         }
         catch (Exception ex)
         {
             return HandleException(ex);
+        }
+    }
+
+    private async Task NotifyParticipantsAsync(IEnumerable<Guid> participantIds, string eventName, object payload)
+    {
+        foreach (var participantId in participantIds.Distinct())
+        {
+            try
+            {
+                await _hubContext.Clients.Group($"user:{participantId}").SendAsync(eventName, payload);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Could not send SignalR event {EventName} to user {UserId}", eventName, participantId);
+            }
         }
     }
 
@@ -235,11 +278,11 @@ public class ConversationController : ControllerBase
             InvalidOperationException =>
                 Conflict(new { message = exception.Message }),
 
-            ArgumentException => 
+            ArgumentException =>
                 BadRequest(new { message = exception.Message }),
 
             _ =>
                 StatusCode(500, new { message = "An internal server error occurred."})
         };
     }
-}   
+}

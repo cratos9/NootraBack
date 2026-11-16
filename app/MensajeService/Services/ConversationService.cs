@@ -1,6 +1,8 @@
 using MensajeService.DTOs.Conversations;
 using MensajeService.Models;
 using MensajeService.Models.Enums;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 using MensajeService.Repositories;
 
 namespace MensajeService.Services;
@@ -39,19 +41,25 @@ public class ConversationService
         var userLowId = currentUserId.CompareTo(otherUserId) < 0 ? currentUserId : otherUserId;
         var userHighId = currentUserId.CompareTo(otherUserId) < 0 ? otherUserId : currentUserId;
         var directKey = $"{userLowId:D}:{userHighId:D}";
-        var existingConversation = await _conversationRepository.GetByDirectKeyAsync(directKey);
-        if (existingConversation != null)
+
+        await using var transaction = await _conversationRepository.BeginTransactionAsync();
+        await _conversationRepository.AcquireDirectKeyLockAsync(directKey);
+
+        var conversation = await _conversationRepository.GetByDirectKeyAsync(directKey);
+        var now = DateTime.UtcNow;
+        if (conversation != null)
         {
             foreach (var userId in new[] { currentUserId, otherUserId })
             {
-                var participant = existingConversation.Participants.FirstOrDefault(p => p.UserId == userId);
+                var participant = conversation.Participants.FirstOrDefault(p => p.UserId == userId);
                 if (participant == null)
                 {
                     await _participantRepository.AddAsync(
                         new ConversationParticipant
                         {
-                            ConversationId = existingConversation.Id,
-                            UserId = userId
+                            ConversationId = conversation.Id,
+                            UserId = userId,
+                            JoinedAt = now
                         });
 
                     continue;
@@ -60,37 +68,38 @@ public class ConversationService
                 if (participant.LeftAt != null)
                 {
                     participant.LeftAt = null;
-                    participant.JoinedAt = DateTime.UtcNow;
-                    _participantRepository.Update(participant);
+                    participant.JoinedAt = now;
                 }
             }
 
-            existingConversation.UpdatedAt = DateTime.UtcNow;
-            _conversationRepository.Update(existingConversation);
-            await _conversationRepository.SaveChangesAsync();
+            conversation.UpdatedAt = now;
+        }
+        else
+        {
+            conversation = new Conversation
+            {
+                Type = ConversationType.Direct,
+                DirectKey = directKey,
+                CreatedAt = now,
+                UpdatedAt = now,
+                Participants = new List<ConversationParticipant>
+                {
+                    new() { UserId = currentUserId, JoinedAt = now },
+                    new() { UserId = otherUserId, JoinedAt = now }
+                }
+            };
 
-            var refreshedConversation = await _conversationRepository.GetByIdAsync(existingConversation.Id);
-
-            return MapToDto(refreshedConversation!);
+            await _conversationRepository.AddAsync(conversation);
         }
 
-        var conversation = new Conversation
-        {
-            Type = ConversationType.Direct,
-            DirectKey = directKey,
-            CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow,
-            Participants = new List<ConversationParticipant>
-            {
-                new() { UserId = currentUserId },
-                new() { UserId = otherUserId }
-            }
-        };
-
-        await _conversationRepository.AddAsync(conversation);
         await _conversationRepository.SaveChangesAsync();
 
-        return MapToDto(conversation);
+        var refreshedConversation =
+            await _conversationRepository.GetByIdAsync(conversation.Id);
+
+        await transaction.CommitAsync();
+
+        return MapToDto(refreshedConversation!);
     }
 
     public async Task<ConversationResponseDto> CreateGroupAsync(Guid creatorId, CreateGroupRequestDto request)
@@ -111,6 +120,9 @@ public class ConversationService
         var description = request.Description?.Trim();
         if (description?.Length > 500)
             throw new ArgumentException("Group description cannot exceed 500 characters.");
+
+        if (request.ParticipantIds == null)
+            throw new ArgumentException("Participant IDs are required.");
 
         var participantIds = request.ParticipantIds.Distinct().ToList();
         if (participantIds.Count == 0)
@@ -170,7 +182,6 @@ public class ConversationService
         if (request == null)
             throw new ArgumentException("Request is required.");
 
-        var conversation = await ValidateGroupAdminAsync(userId, conversationId);
         var name = request.Name?.Trim();
         if (string.IsNullOrWhiteSpace(name))
             throw new ArgumentException("Group name is required.");
@@ -182,13 +193,17 @@ public class ConversationService
         if (description?.Length > 500)
             throw new ArgumentException("Group description cannot exceed 500 characters.");
 
+        await using var transaction = await _conversationRepository.BeginTransactionAsync();
+        var conversation = await GetGroupForUpdateAsync(conversationId);
+        await ValidateGroupAdminAsync(userId, conversation);
         conversation.Name = name;
         conversation.Description = string.IsNullOrWhiteSpace(description) ? null : description;
         conversation.UpdatedAt = DateTime.UtcNow;
-        _conversationRepository.Update(conversation);
         await _conversationRepository.SaveChangesAsync();
+        var refreshedConversation = await _conversationRepository.GetByIdAsync(conversationId);
+        await transaction.CommitAsync();
 
-        return MapToDto(conversation);
+        return MapToDto(refreshedConversation!);
     }
 
     public async Task<ConversationResponseDto> AddParticipantsAsync(Guid adminId, Guid conversationId, AddGroupParticipantsRequestDto request)
@@ -196,7 +211,9 @@ public class ConversationService
         if (request == null)
             throw new ArgumentException("Request is required.");
 
-        var conversation = await ValidateGroupAdminAsync(adminId, conversationId);
+        if (request.ParticipantIds == null)
+            throw new ArgumentException("Participant IDs are required.");
+
         var participantIds = request.ParticipantIds.Distinct().ToList();
         if (participantIds.Count == 0)
             throw new ArgumentException("At least one participant is required.");
@@ -207,6 +224,10 @@ public class ConversationService
         if (participantIds.Contains(adminId))
             throw new ArgumentException("You are already a participant in this group.");
 
+        await using var transaction = await _conversationRepository.BeginTransactionAsync();
+        var conversation = await GetGroupForUpdateAsync(conversationId);
+        await ValidateGroupAdminAsync(adminId, conversation);
+        var now = DateTime.UtcNow;
         foreach (var participantId in participantIds)
         {
             await ValidateAcceptedContactAsync(adminId, participantId);
@@ -220,7 +241,7 @@ public class ConversationService
                         ConversationId = conversationId,
                         UserId = participantId,
                         Role = ConversationParticipantRole.Member,
-                        JoinedAt = DateTime.UtcNow
+                        JoinedAt = now
                     });
 
                 continue;
@@ -230,16 +251,14 @@ public class ConversationService
                 throw new InvalidOperationException($"User {participantId} is already a group participant.");
 
             participant.LeftAt = null;
-            participant.JoinedAt = DateTime.UtcNow;
+            participant.JoinedAt = now;
             participant.Role = ConversationParticipantRole.Member;
-            _participantRepository.Update(participant);
         }
 
-        conversation.UpdatedAt = DateTime.UtcNow;
-        _conversationRepository.Update(conversation);
+        conversation.UpdatedAt = now;
         await _conversationRepository.SaveChangesAsync();
-
         var refreshedConversation = await _conversationRepository.GetByIdAsync(conversationId);
+        await transaction.CommitAsync();
 
         return MapToDto(refreshedConversation!);
     }
@@ -252,51 +271,59 @@ public class ConversationService
         if (adminId == participantId)
             throw new ArgumentException("Use the leave group operation to remove yourself.");
 
-        var conversation = await ValidateGroupAdminAsync(adminId, conversationId);
+        await using var transaction = await _conversationRepository.BeginTransactionAsync();
+        var conversation = await GetGroupForUpdateAsync(conversationId);
+        await ValidateGroupAdminAsync(adminId, conversation);
         var participant = await _participantRepository.GetByConversationAndUserAsync(conversationId, participantId);
         if (participant == null || participant.LeftAt != null)
             throw new KeyNotFoundException("Participant not found.");
 
         if (participant.Role == ConversationParticipantRole.Admin)
-        {
             await EnsureAnotherAdminExistsAsync(conversationId, participantId);
-        }
 
-        participant.LeftAt = DateTime.UtcNow;
-        _participantRepository.Update(participant);
-        conversation.UpdatedAt = DateTime.UtcNow;
-        _conversationRepository.Update(conversation);
+        var now = DateTime.UtcNow;
+        participant.LeftAt = now;
+        conversation.UpdatedAt = now;
+
         await _conversationRepository.SaveChangesAsync();
-    }
 
+        await transaction.CommitAsync();
+    }
+    
     public async Task UpdateParticipantRoleAsync(Guid adminId, Guid conversationId, Guid participantId, UpdateParticipantRoleRequestDto request)
     {
         if (participantId == Guid.Empty)
             throw new ArgumentException("Participant ID is required.");
 
-        if (request == null || !Enum.TryParse<ConversationParticipantRole>(request.Role, true, out var newRole) || !Enum.IsDefined(typeof(ConversationParticipantRole), newRole))
+        if (request == null || (request.Role != "Admin" && request.Role != "Member"))
         {
             throw new ArgumentException("Role must be either Admin or Member.");
         }
 
-        var conversation = await ValidateGroupAdminAsync(adminId, conversationId);
+        var newRole = request.Role == "Admin" ? ConversationParticipantRole.Admin : ConversationParticipantRole.Member;
+        await using var transaction = await _conversationRepository.BeginTransactionAsync();
+        var conversation = await GetGroupForUpdateAsync(conversationId);
+        await ValidateGroupAdminAsync(adminId, conversation);
         var participant = await _participantRepository.GetByConversationAndUserAsync(conversationId, participantId);
         if (participant == null || participant.LeftAt != null)
             throw new KeyNotFoundException("Participant not found.");
 
         if (participant.Role == newRole)
+        {
+            await transaction.CommitAsync();
             return;
+        }
 
-        if (participant.Role == ConversationParticipantRole.Admin && newRole == ConversationParticipantRole.Member)
+        if (participant.Role == ConversationParticipantRole.Admin &&
+            newRole == ConversationParticipantRole.Member)
         {
             await EnsureAnotherAdminExistsAsync(conversationId, participantId);
         }
 
         participant.Role = newRole;
-        _participantRepository.Update(participant);
         conversation.UpdatedAt = DateTime.UtcNow;
-        _conversationRepository.Update(conversation);
         await _conversationRepository.SaveChangesAsync();
+        await transaction.CommitAsync();
     }
 
     public async Task LeaveGroupAsync(Guid userId, Guid conversationId)
@@ -304,22 +331,22 @@ public class ConversationService
         if (userId == Guid.Empty || conversationId == Guid.Empty)
             throw new ArgumentException("IDs are required.");
 
-        var conversation = await GetGroupAsync(conversationId);
+        await using var transaction = await _conversationRepository.BeginTransactionAsync();
+        var conversation = await GetGroupForUpdateAsync(conversationId);
         var participant = await _participantRepository.GetByConversationAndUserAsync(conversationId, userId);
         if (participant == null || participant.LeftAt != null)
             throw new KeyNotFoundException("Group not found.");
 
         if (participant.Role == ConversationParticipantRole.Admin)
-        {
             await EnsureAnotherAdminExistsAsync(conversationId, userId);
-        }
 
-        participant.LeftAt = DateTime.UtcNow;
-        _participantRepository.Update(participant);
-        conversation.UpdatedAt = DateTime.UtcNow;
-        _conversationRepository.Update(conversation);
+        var now = DateTime.UtcNow;
+        participant.LeftAt = now;
+        conversation.UpdatedAt = now;
         await _conversationRepository.SaveChangesAsync();
+        await transaction.CommitAsync();
     }
+
     public async Task<List<ConversationResponseDto>> GetMyConversationsAsync(Guid userId)
     {
         if (userId == Guid.Empty)
@@ -373,10 +400,10 @@ public class ConversationService
         var participant = await _participantRepository.GetByConversationAndUserAsync(conversationId, userId);
         if (participant == null || participant.LeftAt != null)
             throw new KeyNotFoundException("Conversation not found.");
-
-        participant.LeftAt = DateTime.UtcNow;
-        _participantRepository.Update(participant);
-        await _participantRepository.SaveChangesAsync();
+    var now = DateTime.UtcNow;
+    participant.LeftAt = now;
+    conversation.UpdatedAt = now;
+    await _participantRepository.SaveChangesAsync();
     }
 
     private async Task ValidateActiveParticipantAsync(Guid userId, Guid conversationId)
@@ -404,20 +431,32 @@ public class ConversationService
         return conversation;
     }
 
-    private async Task<Conversation> ValidateGroupAdminAsync(Guid userId, Guid conversationId)
+    private async Task<Conversation> GetGroupForUpdateAsync(Guid conversationId)
+    {
+        if (conversationId == Guid.Empty)
+            throw new ArgumentException("Conversation ID is required.");
+
+        var conversation = await _conversationRepository.GetByIdForUpdateAsync(conversationId);
+        if (conversation == null)
+            throw new KeyNotFoundException("Group not found.");
+
+        if (conversation.Type != ConversationType.Group)
+            throw new ArgumentException("This operation is only available for group conversations.");
+
+        return conversation;
+    }
+
+    private async Task ValidateGroupAdminAsync(Guid userId, Conversation conversation)
     {
         if (userId == Guid.Empty)
             throw new ArgumentException("User ID is required.");
 
-        var conversation = await GetGroupAsync(conversationId);
-        var participant = await _participantRepository.GetByConversationAndUserAsync(conversationId, userId);
+        var participant = await _participantRepository.GetByConversationAndUserAsync(conversation.Id, userId);
         if (participant == null || participant.LeftAt != null)
             throw new KeyNotFoundException("Group not found.");
 
         if (participant.Role != ConversationParticipantRole.Admin)
             throw new UnauthorizedAccessException("Only group administrators can perform this operation.");
-
-        return conversation;
     }
 
     private async Task ValidateAcceptedContactAsync(Guid currentUserId, Guid otherUserId)

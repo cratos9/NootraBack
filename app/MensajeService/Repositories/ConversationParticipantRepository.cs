@@ -19,8 +19,7 @@ public class ConversationParticipantRepository
             .FirstOrDefaultAsync(p =>p.ConversationId == conversationId && p.UserId == userId);
     }
 
-    public async Task<List<ConversationParticipant>> GetActiveByConversationAsync(
-        Guid conversationId)
+    public async Task<List<ConversationParticipant>> GetActiveByConversationAsync(Guid conversationId)
     {
         return await _context.ConversationParticipants
             .AsNoTracking()

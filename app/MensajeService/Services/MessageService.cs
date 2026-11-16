@@ -24,6 +24,9 @@ public class MessageService
 
     public async Task<MessageResponseDto> SendTextAsync(Guid senderId, SendMessageRequestDto request)
     {
+        if (request is null)
+            throw new ArgumentException("Request cannot be null.");
+        
         if (senderId == Guid.Empty || request.ConversationId == Guid.Empty)
             throw new ArgumentException("Invalid user or conversation ID.");
 
@@ -217,14 +220,15 @@ public class MessageService
         await EnsureActiveParticipantAsync(senderId, conversationId);
 
         var participantIds = await GetActiveParticipantIdsAsync(conversationId);
+        var now = DateTime.UtcNow;
         var message = new Message
         {
             ConversationId = conversationId,
             SenderId = senderId,
             Content = null,
             Type = isImage ? MessageType.Image : MessageType.File,
-            CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow,
+            CreatedAt = now,
+            UpdatedAt = now,
             IsEdited = false
         };
 
@@ -326,6 +330,8 @@ public class MessageService
         if (receipt == null)
             throw new KeyNotFoundException("Message receipt not found.");
 
+        await EnsureActiveParticipantAsync(recipientId, receipt.Message.ConversationId);
+
         if (receipt.DeliveredAt == null)
         {
             receipt.DeliveredAt = DateTime.UtcNow;
@@ -345,6 +351,8 @@ public class MessageService
         var receipt = await _receiptRepository.GetByMessageAndRecipientAsync(messageId, recipientId);
         if (receipt == null)
             throw new KeyNotFoundException("Message receipt not found.");
+
+        await EnsureActiveParticipantAsync(recipientId, receipt.Message.ConversationId);
 
         if (receipt.ReadAt == null)
         {

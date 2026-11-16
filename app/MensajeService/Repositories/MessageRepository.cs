@@ -20,7 +20,7 @@ public class MessageRepository
 
     public async Task<Message?> GetByIdAsync(Guid messageId)
     {
-        return await _context.Messages.Include(m => m.Receipts).FirstOrDefaultAsync(m => m.Id == messageId);
+        return await _context.Messages.Include(m => m.Receipts).Include(m => m.Attachments).FirstOrDefaultAsync(m => m.Id == messageId);
     }
 
     public async Task<MessageAttachment?> GetAttachmentByIdAsync(Guid attachmentId)
@@ -42,6 +42,7 @@ public class MessageRepository
         var messages = await query
             .Include(m => m.Receipts)
             .Include(m => m.Attachments)
+            .AsSplitQuery()
             .OrderByDescending(m => m.CreatedAt)
             .ThenByDescending(m => m.Id)
             .Take(limit + 1)
