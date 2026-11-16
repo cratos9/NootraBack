@@ -55,7 +55,7 @@ public class MessageConfiguration : IEntityTypeConfiguration<Message>
             .HasColumnName("deleted_at")
             .HasColumnType("timestamp with time zone");
 
-        builder.HasIndex(m => new { m.ConversationId, m.CreatedAt })
+        builder.HasIndex(m => new { m.ConversationId, m.CreatedAt, m.Id })
             .HasDatabaseName("ix_messages_conversation_created_at");
 
         builder.HasIndex(m => m.SenderId)

@@ -67,18 +67,33 @@ public class MessageService
         return MapToDto(message);
     }
 
-    public async Task<List<MessageResponseDto>> GetHistoryAsync(Guid userId, Guid conversationId)
+    public async Task<MessageHistoryResponseDto> GetHistoryAsync(Guid userId, Guid conversationId, int limit = 50, DateTime? beforeCreatedAt = null, Guid? beforeMessageId = null)
     {
         if (userId == Guid.Empty || conversationId == Guid.Empty)
             throw new ArgumentException("Invalid user or conversation ID.");
+
+        if (limit < 1 || limit > 100)
+            throw new ArgumentException("Limit must be between 1 and 100.");
+
+        if (beforeCreatedAt.HasValue != beforeMessageId.HasValue)
+            throw new ArgumentException("Both beforeCreatedAt and beforeMessageId must be provided together.");
+
+        if (beforeMessageId == Guid.Empty)
+            throw new ArgumentException("Invalid cursor message ID.");
 
         var isActiveParticipant =await _participantRepository.IsActiveParticipantAsync(conversationId, userId);
         if (!isActiveParticipant)
             throw new KeyNotFoundException("Conversation not found.");
 
-        var messages = await _messageRepository.GetHistoryAsync(conversationId);
+        var (messages, hasMore) = await _messageRepository.GetHistoryAsync(conversationId, limit, beforeCreatedAt, beforeMessageId);
+        var response = new MessageHistoryResponseDto { Items = messages.Select(MapToDto).ToList(), HasMore = hasMore};
+        if (hasMore && messages.Count > 0)
+        {
+            var oldestMessage = messages[0];
+            response.NextCursor = new MessageCursorDto { CreatedAt = oldestMessage.CreatedAt, MessageId = oldestMessage.Id};
+        }
 
-        return messages.Select(MapToDto).ToList();
+        return response;
     }
 
     public async Task<MessageResponseDto> UpdateTextAsync(Guid senderId, Guid messageId, UpdateMessageRequestDto request)

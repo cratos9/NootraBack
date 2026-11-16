@@ -296,7 +296,7 @@ namespace MensajeService.Migrations
                     b.HasIndex("SenderId")
                         .HasDatabaseName("ix_messages_sender_id");
 
-                    b.HasIndex("ConversationId", "CreatedAt")
+                    b.HasIndex("ConversationId", "CreatedAt", "Id")
                         .HasDatabaseName("ix_messages_conversation_created_at");
 
                     b.ToTable("messages", null, t =>

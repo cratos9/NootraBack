@@ -22,7 +22,7 @@ public class MessageController : ControllerBase
     }
 
     [HttpGet("conversation/{conversationId:guid}")]
-    public async Task<IActionResult> GetHistory(Guid conversationId)
+    public async Task<IActionResult> GetHistory(Guid conversationId, [FromQuery] int limit = 50, [FromQuery] DateTime? beforeCreatedAt = null, [FromQuery] Guid? beforeMessageId = null)
     {
         var claim = User.FindFirst("sub")?.Value;
         if (!Guid.TryParse(claim, out var userId))
@@ -30,7 +30,7 @@ public class MessageController : ControllerBase
 
         try
         {
-            var messages = await _messageService.GetHistoryAsync(userId, conversationId);
+            var messages = await _messageService.GetHistoryAsync(userId, conversationId, limit, beforeCreatedAt, beforeMessageId);
 
             return Ok(messages);
         }
