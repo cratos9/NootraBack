@@ -92,6 +92,64 @@ public class MessageHub : Hub
         }
     }
 
+    public async Task StartTyping(Guid conversationId)
+    {
+        var userId = GetUserId();
+
+        if (conversationId == Guid.Empty)
+            throw new HubException("Invalid conversation ID.");
+
+        try
+        {
+            await _messageService.EnsureActiveParticipantAsync(userId, conversationId);
+            var participantIds = await _messageService.GetActiveParticipantIdsAsync(conversationId);
+            foreach (var participantId in participantIds)
+            {
+                if (participantId == userId)
+                    continue;
+
+                await Clients.Group($"user:{participantId}").SendAsync( "UserTyping", new {ConversationId = conversationId, UserId = userId}, Context.ConnectionAborted);
+            }
+        }
+        catch (ArgumentException ex)
+        {
+            throw new HubException(ex.Message);
+        }
+        catch (KeyNotFoundException)
+        {
+            throw new HubException("Conversation not found.");
+        }
+    }
+
+    public async Task StopTyping(Guid conversationId)
+    {
+        var userId = GetUserId();
+
+        if (conversationId == Guid.Empty)
+            throw new HubException("Invalid conversation ID.");
+
+        try
+        {
+            await _messageService.EnsureActiveParticipantAsync(userId, conversationId);
+            var participantIds = await _messageService.GetActiveParticipantIdsAsync(conversationId);
+            foreach (var participantId in participantIds)
+            {
+                if (participantId == userId)
+                    continue;
+
+                await Clients.Group($"user:{participantId}").SendAsync( "UserStoppedTyping", new {ConversationId = conversationId, UserId = userId}, Context.ConnectionAborted);
+            }
+        }
+        catch (ArgumentException ex)
+        {
+            throw new HubException(ex.Message);
+        }
+        catch (KeyNotFoundException)
+        {
+            throw new HubException("Conversation not found.");
+        }
+    }
+
     private Guid GetUserId()
     {
         var claim = Context.User?.FindFirst("sub")?.Value;

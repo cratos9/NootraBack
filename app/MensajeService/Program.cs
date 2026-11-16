@@ -18,6 +18,7 @@ builder.Services.AddDbContext<MessageDbContext>(options =>
     )
 );
 
+builder.Services.AddScoped<FileStorageService>();
 builder.Services.AddScoped<MessageRepository>();
 builder.Services.AddScoped<MessageReceiptRepository>();
 builder.Services.AddScoped<MessageService>();

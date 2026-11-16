@@ -18,12 +18,23 @@ public class MessageRepository
         await _context.Messages.AddAsync(message);
     }
 
+    public async Task<Message?> GetByIdAsync(Guid messageId)
+    {
+        return await _context.Messages.Include(m => m.Receipts).FirstOrDefaultAsync(m => m.Id == messageId);
+    }
+
+    public async Task<MessageAttachment?> GetAttachmentByIdAsync(Guid attachmentId)
+    {
+        return await _context.MessageAttachments.Include(a => a.Message).FirstOrDefaultAsync(a => a.Id == attachmentId);
+    }
+
     public async Task<List<Message>> GetHistoryAsync(Guid conversationId, int limit = 50)
     {
         var messages = await _context.Messages
             .AsNoTracking()
             .Where(m => m.ConversationId == conversationId)
             .Include(m => m.Receipts)
+            .Include(m => m.Attachments)
             .OrderByDescending(m => m.CreatedAt)
             .ThenByDescending(m => m.Id)
             .Take(limit)

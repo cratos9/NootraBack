@@ -12,4 +12,5 @@ public class MessageResponseDto
     public bool IsEdited { get; set; }
     public DateTime? DeletedAt { get; set; }
     public List<MessageReceiptResponseDto> Receipts { get; set; } = new();
+    public List<MessageAttachmentResponseDto> Attachments { get; set; } = new();
 }

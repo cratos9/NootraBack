@@ -56,6 +56,7 @@ dist/
 pip-wheel-metadata/
 /app/AuthService/wwwroot/uploads/profile-pictures/*.png
 /app/BookService/storage/attachments/*
+/app/MensajeService/App_Data/Uploads/messages/*
 
 .pytest_cache/
 .coverage
